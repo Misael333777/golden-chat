@@ -336,11 +336,24 @@
   <script type="module">
     import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat/chat.bundle.es.js';
 
+    // Identificador propio y persistente del cliente: se genera una sola vez
+    // por navegador/dispositivo y se guarda en localStorage, para que el bot
+    // pueda reconocer al mismo cliente aunque cierre la pestaña y vuelva otro día.
+    const STORAGE_KEY = 'golden_cliente_id';
+    let clienteId = localStorage.getItem(STORAGE_KEY);
+    if (!clienteId) {
+      clienteId = 'cli-' + crypto.randomUUID();
+      localStorage.setItem(STORAGE_KEY, clienteId);
+    }
+
     createChat({
       webhookUrl: 'https://fibotehc.app.n8n.cloud/webhook/e56a9fbd-bca3-403e-bc67-a3a027b51010/chat',
       target: '#golden-chat',
       mode: 'fullscreen',
       showWelcomeScreen: false,
+      metadata: {
+        clienteId: clienteId
+      },
       initialMessages: [
         '🍞 ¡Hola! Por acá Golden, tu panificadora de confianza ✨ ¿Con qué te tentamos hoy?'
       ],
@@ -359,3 +372,4 @@
 
 </body>
 </html>
+
