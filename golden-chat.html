@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Golden — Pedí por chat</title>
+<link href="https://cdn.jsdelivr.net/npm/@n8n/chat/style.css" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yeseva+One&family=Karla:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2C1B12;
+    --ink-soft: #6E5842;
+    --cream: #FBF1DE;
+    --panel: #F4E4C1;
+    --gold: #C98A2B;
+    --gold-deep: #A96F1E;
+    --brick: #9C3B26;
+    --line: rgba(44, 27, 18, 0.14);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Karla', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stripes {
+    height: 14px;
+    width: 100%;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--gold) 0px, var(--gold) 22px,
+      var(--cream) 22px, var(--cream) 44px
+    );
+    flex-shrink: 0;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 22px clamp(20px, 5vw, 56px) 18px;
+  }
+
+  header svg { flex-shrink: 0; }
+
+  header .wordmark {
+    font-family: 'Yeseva One', serif;
+    font-size: 1.6rem;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+
+  header .tagline {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: clamp(24px, 4vw, 64px);
+    padding: clamp(12px, 3vw, 40px) clamp(20px, 5vw, 56px) 48px;
+    max-width: 1280px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-right: 8px;
+  }
+
+  .hero h1 {
+    font-family: 'Yeseva One', serif;
+    font-weight: 400;
+    font-size: clamp(2.1rem, 4vw, 3.1rem);
+    line-height: 1.12;
+    margin: 0 0 18px;
+    color: var(--ink);
+    max-width: 13ch;
+  }
+
+  .hero p.lede {
+    font-size: 1.08rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 46ch;
+    margin: 0 0 28px;
+  }
+
+  .info-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin-bottom: 30px;
+  }
+
+  .info-item {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 0.94rem;
+  }
+
+  .info-item strong {
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  .info-item span {
+    color: var(--ink-soft);
+  }
+
+  .info-item .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--brick);
+    display: inline-block;
+    margin-right: 2px;
+  }
+
+  .categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 16px 8px 10px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .chip .emoji {
+    font-size: 1.05rem;
+  }
+
+  .window {
+    position: relative;
+    background: var(--panel);
+    border-radius: 18px;
+    padding: 10px;
+    border: 3px solid var(--ink);
+    box-shadow: 8px 8px 0 var(--gold);
+    display: flex;
+    flex-direction: column;
+    min-height: 560px;
+  }
+
+  .window-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px 14px;
+  }
+
+  .window-topbar .puff {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--brick);
+  }
+
+  .window-topbar .puff:nth-child(2) { background: var(--gold); }
+  .window-topbar .puff:nth-child(3) { background: var(--ink-soft); opacity: 0.5; }
+
+  .window-topbar .label {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+
+  .chat-shell {
+    flex: 1;
+    background: var(--cream);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1.5px solid var(--line);
+    position: relative;
+  }
+
+  #golden-chat {
+    height: 100%;
+    width: 100%;
+  }
+
+  footer {
+    text-align: center;
+    padding: 22px 20px 30px;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+  }
+
+  footer strong { color: var(--ink); }
+
+  @media (max-width: 860px) {
+    main {
+      grid-template-columns: 1fr;
+    }
+    .hero { padding-right: 0; text-align: left; }
+    .window { min-height: 460px; }
+  }
+
+  /* ---- Overrides for the n8n chat widget so it inherits Golden's palette ---- */
+  :root {
+    --chat--color-primary: var(--gold-deep);
+    --chat--color-primary-shade-50: var(--brick);
+    --chat--color-primary-shade-100: var(--brick);
+    --chat--color-secondary: var(--ink);
+    --chat--color-white: var(--cream);
+    --chat--color-light: var(--panel);
+    --chat--color-light-shade-50: #ECD9AE;
+    --chat--color-light-shade-100: #E4CC98;
+    --chat--color-medium: var(--line);
+    --chat--color-dark: var(--ink);
+    --chat--color-disabled: #a0958a;
+    --chat--color-typing: var(--ink-soft);
+    --chat--spacing: 1rem;
+    --chat--border-radius: 10px;
+    --chat--font-family: 'Karla', sans-serif;
+    --chat--header--background: var(--gold);
+    --chat--header--color: var(--cream);
+    --chat--header--padding: 1.1rem;
+    --chat--heading--font-size: 1.2rem;
+    --chat--message--bot--background: var(--panel);
+    --chat--message--bot--color: var(--ink);
+    --chat--message--user--background: var(--gold-deep);
+    --chat--message--user--color: #fff;
+    --chat--toggle--background: var(--gold-deep);
+    --chat--toggle--hover--background: var(--brick);
+    --chat--toggle--active--background: var(--brick);
+    --chat--input--border: 1px solid var(--line);
+    --chat--window--width: 100%;
+    --chat--window--height: 100%;
+  }
+
+  .chat-shell .chat-window-wrapper,
+  .chat-shell .n8n-chat {
+    position: static !important;
+    width: 100% !important;
+    height: 100% !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+</style>
+</head>
+<body>
+
+  <div class="stripes"></div>
+
+  <header>
+    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+      <path d="M8 22C8 14.8 13.4 9 20 9C26.6 9 32 14.8 32 22C32 22.9 31.9 23.7 31.7 24.5C33.3 25.5 34.3 27.3 34 29.3C33.6 31.9 31.1 33.5 28.5 33H11.5C8.9 33.5 6.4 31.9 6 29.3C5.7 27.3 6.7 25.5 8.3 24.5C8.1 23.7 8 22.9 8 22Z" fill="#C98A2B" stroke="#2C1B12" stroke-width="1.6"/>
+      <path d="M14 20.5C14.6 19.5 15.7 19 17 19M23 19C24.3 19 25.4 19.5 26 20.5" stroke="#2C1B12" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <div class="wordmark">Golden</div>
+      <div class="tagline">Panificadora — pedidos por chat</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Pan recién horneado, a un mensaje de distancia</h1>
+      <p class="lede">
+        Contale al chat qué se te antoja hoy y armamos el pedido juntos:
+        elegís, confirmás y coordinamos la entrega, todo por acá.
+      </p>
+
+      <div class="info-row">
+        <div class="info-item">
+          <span class="dot"></span>
+          <strong>Atención</strong>
+          <span>todos los días, 8 a 22 hs</span>
+        </div>
+        <div class="info-item">
+          <span class="dot"></span>
+          <strong>Entregas</strong>
+          <span>con un día de anticipación</span>
+        </div>
+      </div>
+
+      <div class="categories">
+        <span class="chip"><span class="emoji">🥖</span> Pan</span>
+        <span class="chip"><span class="emoji">🥐</span> Facturas</span>
+        <span class="chip"><span class="emoji">🍪</span> Bandejitas</span>
+        <span class="chip"><span class="emoji">🍕</span> Pizzas</span>
+        <span class="chip"><span class="emoji">🥧</span> Tartas</span>
+      </div>
+    </section>
+
+    <section class="window" aria-label="Chat de pedidos">
+      <div class="window-topbar">
+        <span class="puff"></span>
+        <span class="puff"></span>
+        <span class="puff"></span>
+        <span class="label">en línea</span>
+      </div>
+      <div class="chat-shell">
+        <div id="golden-chat"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <strong>Golden</strong> · tu panificadora de confianza
+  </footer>
+
+  <script type="module">
+    import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat/chat.bundle.es.js';
+
+    // Identificador propio y persistente del cliente: se genera una sola vez
+    // por navegador/dispositivo y se guarda en localStorage, para que el bot
+    // pueda reconocer al mismo cliente aunque cierre la pestaña y vuelva otro día.
+    const STORAGE_KEY = 'golden_cliente_id';
+    let clienteId = localStorage.getItem(STORAGE_KEY);
+    if (!clienteId) {
+      clienteId = 'cli-' + crypto.randomUUID();
+      localStorage.setItem(STORAGE_KEY, clienteId);
+    }
+
+    createChat({
+      webhookUrl: 'https://fibotehc.app.n8n.cloud/webhook/e56a9fbd-bca3-403e-bc67-a3a027b51010/chat',
+      target: '#golden-chat',
+      mode: 'fullscreen',
+      showWelcomeScreen: false,
+      metadata: {
+        clienteId: clienteId
+      },
+      initialMessages: [
+        '🍞 ¡Hola! Por acá Golden, tu panificadora de confianza ✨ ¿Con qué te tentamos hoy?'
+      ],
+      i18n: {
+        es: {
+          title: '',
+          subtitle: '',
+          footer: '',
+          getStarted: 'Empezar a charlar',
+          inputPlaceholder: 'Escribí tu pedido...',
+        },
+      },
+      defaultLanguage: 'es',
+    });
+  </script>
+
+</body>
+</html>
