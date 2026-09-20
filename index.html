@@ -100,18 +100,18 @@
 
   .logo-crop {
     width: clamp(250px, 20vw, 330px);
-    height: 128px;
-    overflow: hidden;
+    height: 150px;
+    overflow: visible;
     flex: 0 0 auto;
-    position: relative;
+    display: flex;
+    align-items: center;
   }
 
   .logo-crop img {
-    position: absolute;
+    position: static;
     width: 100%;
-    height: auto;
-    left: 0;
-    top: -55px;
+    height: 100%;
+    object-fit: contain;
     display: block;
   }
 
@@ -529,10 +529,8 @@
 
     .logo-crop {
       width: 255px;
-      height: 112px;
+      height: 125px;
     }
-
-    .logo-crop img { top: -47px; }
 
     main {
       grid-template-columns: 1fr;
@@ -571,10 +569,8 @@
 
     .logo-crop {
       width: 220px;
-      height: 96px;
+      height: 108px;
     }
-
-    .logo-crop img { top: -41px; }
 
     .online {
       margin-top: 14px;
