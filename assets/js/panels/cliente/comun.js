@@ -8,8 +8,8 @@ import * as ops from '../../ops.js';
 // Rutas de la Web API PROD usadas por el panel (tipo/accion). 'usuario' = consultas de la propia persona.
 export const RUTA = {
   mi_perfil: 'usuario', mi_catalogo: 'usuario',
-  mi_habitual: 'recurrente', cambio_vigente: 'recurrente',
-  mi_pedido_fecha: 'pedido', crear_pedido_normal: 'pedido', mis_pedidos: 'pedido',
+  mi_habitual: 'recurrente', cambio_vigente: 'recurrente', editar_habitual_dia: 'recurrente',
+  mi_pedido_fecha: 'pedido', crear_pedido_normal: 'pedido', mis_pedidos: 'pedido', hoy_no_pedir: 'pedido', anular: 'pedido',
   mis_extras: 'extra', solicitar_extra: 'extra',
   mi_cuenta: 'cuenta',
   mis_casos: 'soporte', solicitar_soporte: 'soporte',
@@ -65,8 +65,16 @@ const MSJ = {
   OPERACION_ID_REUTILIZADO: 'Esa operación ya se había usado con otros datos. Volvé a intentarlo.',
   CAMPO_NO_PERMITIDO: 'La solicitud tenía datos que no se permiten.',
   DEMASIADAS_CONSULTAS: 'Ya tenés varias consultas abiertas. Esperá a que Golden las responda.',
+  PRODUCTO_DUPLICADO: 'Hay un producto repetido en el día: juntalo en una sola línea.',
+  LINEAS_INVALIDAS: 'Revisá los productos y cantidades del día.',
+  CANTIDAD_INVALIDA: 'Cada producto necesita una cantidad mayor que 0.',
+  RECURRENTE_MODIFICADO: 'Tu habitual cambió mientras lo editabas. Actualizá la pantalla y volvé a intentarlo.',
+  SIN_RECURRENTE_PARA_FECHA: 'No tenés habitual ese día: no hay nada que dejar de pedir.',
+  SIN_EXCEPCION_VIGENTE: 'No hay un cambio para ese día que se pueda deshacer.',
+  REQUIERE_REVISION: 'Golden tiene que revisar este pedido. No se cambió nada.',
 };
 const OK_TXT = { PEDIDO_REGISTRADO: 'Pedido registrado.', VERSION_SUPERADA: 'Pedido registrado.', CAMBIO_VIGENTE_APLICADO: 'Tu habitual se actualizó.', EXTRA_SOLICITADO: 'Extra solicitado. Golden lo va a revisar.',
+  HABITUAL_DIA_EDITADO: 'Tu habitual se actualizó.', HOY_NO_PEDIR_REGISTRADO: 'Listo: ese día no recibís pedido. Tu habitual no cambia.', PEDIDO_ANULADO: 'Listo: se anuló el pedido de ese día.',
   OPERACION_YA_PROCESADA: 'Ya estaba registrado. No se duplicó.', OK: 'Listo.' };
 export const textoOk = (r) => OK_TXT[r.codigo] || r.mensaje || 'Listo.';
 export function avisoCli(r) {
@@ -119,4 +127,50 @@ export async function escribir(ctx, zona, accion, campos, alExito) {
   if (res.r.success) { if (alExito) await alExito(res.r); else montar(zona, avisoCli(res.r)); }
   else montar(zona, avisoCli(res.r));
   return res.r;
+}
+
+// Etapa 4: la fila "ancla" (sin producto y cantidad 0) solo guarda la logística del día: nunca se muestra como producto en Cliente/Repartidor.
+export const esAncla = (l) => !!l && (l.producto_id === null || l.producto_id === undefined) && l.cantidad === 0;
+
+// Editor de líneas (producto + cantidad + aclaración) para el habitual de un día. Mínimo una línea, cantidad > 0 y sin productos repetidos.
+// Mismo marcado y clases que el editor de "Pedido para una fecha". Devuelve { nodo, leer } (leer -> { lineas } o { error }).
+export function editorLineas(productos, iniciales, idBase) {
+  const filas = [];
+  const lista = el('div', { class: 'stack lin-editor', id: idBase + '-lineas' });
+  const agregar = (ini) => {
+    const k = filas.length ? Math.max(...filas.map(f => f.k)) + 1 : 0;
+    const sProd = el('select', { class: 'select', id: idBase + '-prod-' + k, 'aria-label': 'Producto' }, el('option', { value: '', text: 'Elegí un producto…' }),
+      productos.map(p => el('option', { value: String(p.producto_id), text: p.nombre + (p.unidad ? ' (' + p.unidad + ')' : '') })));
+    if (ini && Number.isInteger(ini.producto_id)) {
+      if (!productos.some(p => p.producto_id === ini.producto_id)) sProd.appendChild(el('option', { value: String(ini.producto_id), text: (str(ini.producto) || 'Producto actual') + ' (no disponible)' }));
+      sProd.value = String(ini.producto_id);
+    }
+    const iCant = el('input', { class: 'input input-num', id: idBase + '-cant-' + k, type: 'number', min: '0', step: 'any', inputmode: 'decimal', 'aria-label': 'Cantidad', value: ini && typeof ini.cantidad === 'number' && ini.cantidad > 0 ? String(ini.cantidad) : '' });
+    const iDet = el('input', { class: 'input', id: idBase + '-det-' + k, maxlength: '200', 'aria-label': 'Aclaración', placeholder: 'Aclaración (opcional)', autocomplete: 'off', value: ini && ini.detalle_libre ? ini.detalle_libre : '' });
+    const quitar = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'quitar-linea' }, 'Quitar');
+    const nodo = el('div', { class: 'lin-fila', 'data-fila': String(k) }, sProd, iCant, iDet, quitar);
+    const f = { k, nodo, sProd, iCant, iDet };
+    quitar.addEventListener('click', () => { if (filas.length <= 1) return; filas.splice(filas.indexOf(f), 1); nodo.remove(); });
+    filas.push(f); lista.insertBefore(nodo, bAgregar);
+  };
+  const bAgregar = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: idBase + '-agregar', 'data-accion': 'agregar-linea', onclick: () => agregar(null) }, 'Agregar producto');
+  lista.appendChild(bAgregar);
+  for (const i of (iniciales && iniciales.length ? iniciales : [null])) agregar(i);
+  const leer = () => {
+    const out = []; const vistos = new Set();
+    for (const f of filas) {
+      const pid = Number(f.sProd.value);
+      if (!Number.isInteger(pid) || pid <= 0) return { error: 'Elegí el producto de cada línea.' };
+      if (vistos.has(pid)) return { error: 'Hay un producto repetido: juntalo en una sola línea.' };
+      vistos.add(pid);
+      const q = leerNum(f.iCant.value);
+      if (!(q > 0)) return { error: 'Cada línea necesita una cantidad mayor que 0.' };
+      const o = { producto_id: pid, cantidad: q };
+      const det = f.iDet.value.trim(); if (det) o.detalle_libre = det;
+      out.push(o);
+    }
+    if (!out.length) return { error: 'El día necesita al menos un producto.' };
+    return { lineas: out };
+  };
+  return { nodo: lista, leer };
 }

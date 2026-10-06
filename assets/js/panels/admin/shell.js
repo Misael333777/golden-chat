@@ -99,6 +99,7 @@ const ACC_TXT = { crear_persona: 'Crear persona', editar_persona: 'Editar datos'
   reactivar_rol: 'Reactivar rol', habilitar_acceso: 'Habilitar acceso', deshabilitar_acceso: 'Deshabilitar acceso',
   crear_producto: 'Crear producto', editar_producto: 'Editar producto', cambiar_precios: 'Cambiar precios', activar_producto: 'Activar producto', desactivar_producto: 'Desactivar producto',
   crear_pedido_normal: 'Pedido de la fecha', configurar_recurrente: 'Configurar habitual', agregar_dia: 'Agregar día al habitual', cambio_vigente: 'Editar habitual',
+  editar_habitual_dia: 'Editar día del habitual', hoy_no_pedir: 'Hoy no pedir', anular_pedido_fecha: 'Volver al habitual / cancelar pedido',
   solicitar_extra: 'Cargar extra', aprobar_extra: 'Aprobar extra', rechazar_extra: 'Rechazar extra', registrar_entrega: 'Registrar entrega', recuperar_finanzas_extra: 'Generar cargo del extra',
   agregar_linea_manual: 'Agregar línea manual', editar_linea_manual: 'Editar línea manual', anular_linea_manual: 'Anular línea manual',
   crear_aclaracion: 'Crear aclaración', editar_aclaracion: 'Editar aclaración', activar_aclaracion: 'Activar aclaración', desactivar_aclaracion: 'Desactivar aclaración', actualizar_configuracion: 'Datos generales', derivar_revision: 'Derivar a Finanzas', atender_revision: 'Marcar revisión atendida',

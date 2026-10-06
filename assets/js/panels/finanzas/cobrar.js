@@ -7,7 +7,7 @@ import { nuevoCobro } from './dinero.js';
 
 const filtro = { texto: '', estado: 'todos' };
 const TIPO_TXT = { saldo_inicial: 'Saldo inicial', cargo: 'Cargo', pago: 'Pago', ajuste_debito: 'Ajuste (débito)', ajuste_credito: 'Ajuste (crédito)', reversion: 'Reversión', anulacion: 'Anulación', otro: 'Movimiento' };
-const ORIGEN_TXT = { extras_cola_finanzas: 'Extra entregado', manual_admin_finanzas: 'Carga manual', pago_admin_finanzas: 'Cobro', ajuste_admin_finanzas: 'Ajuste', reversion_admin_finanzas: 'Reversión' };
+const ORIGEN_TXT = { extras_cola_finanzas: 'Extra entregado', manual_admin_finanzas: 'Carga manual', pago_admin_finanzas: 'Cobro', ajuste_admin_finanzas: 'Ajuste', reversion_admin_finanzas: 'Reversión', cierre_produccion: 'Cargo de cierre' };
 const ROL_TXT = { cliente: 'Cliente', repartidor: 'Repartidor' };
 
 export function vistaCobrar(ctx, cont) {

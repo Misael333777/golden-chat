@@ -1,8 +1,10 @@
 // Admin General → Pedidos.
 // Usa SOLO acciones de Web API PROD (tipo admin_general → Consultas / Escrituras / Recurrentes Cambios / Extras PROD):
 //   lectura: pedidos_fecha, pedido_persona, habitual_persona, extras_admin (+ listar_personas y listar_productos ya existentes);
-//   escritura: crear_pedido_normal, configurar_recurrente, agregar_dia, cambio_vigente, solicitar_extra, aprobar_extra,
-//   rechazar_extra, registrar_entrega, recuperar_finanzas_extra.
+//   escritura: crear_pedido_normal, configurar_recurrente, agregar_dia, editar_habitual_dia, hoy_no_pedir, anular_pedido_fecha,
+//   solicitar_extra, aprobar_extra, rechazar_extra, registrar_entrega, recuperar_finanzas_extra.
+// Etapa 4: el día habitual se edita COMPLETO (editar_habitual_dia: lista entera + salida/repartidor del día). La fila ancla (sin producto,
+// cantidad 0) se muestra como "Solo logística". 'Hoy no pedir' / 'Volver al habitual' / 'Cancelar pedido' usan las rutas existentes (sin pedido_id).
 // Reglas: el backend decide TODO (tipo solo_por_hoy / pedido_nuevo_no_recurrente, corte, cierre, roles, idempotencia).
 // Acá no se recalcula producción ni el habitual: se muestra lo que devuelve el backend y su código.
 // Finanzas: solo estado operativo del extra (generado / pendiente de generar / no corresponde). Nunca precios ni importes.
@@ -40,6 +42,10 @@ const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'do
 const DIA_TXT = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo' };
 const SALIDAS = ['salida 1', 'salida 2', 'salida 3', 'salida 4'];
 const salidaTxt = (s) => str(s) ? s.charAt(0).toUpperCase() + s.slice(1) : 'Sin salida';
+// Etapa 4: fila ancla = sin producto y cantidad 0 (solo guarda la logística del día). Nunca se muestra como producto.
+const esAncla = (l) => !!l && (l.ancla === true || ((l.producto_id === null || l.producto_id === undefined) && l.cantidad === 0));
+// Salida y repartidor del día (uniformes en el día; se toman de la primera línea activa, incluida la ancla).
+const logisticaDia = (ls) => { const l = (ls || [])[0] || {}; return { salida: str(l.salida), repartidor_persona_id: str(l.repartidor_persona_id) }; };
 
 // Mensajes claros por código (el código del backend se muestra siempre al lado). Sin texto propio, se usa el mensaje del backend.
 const MSJ = {
@@ -54,6 +60,9 @@ const MSJ = {
   SIN_IMPORTE: 'Este extra no tiene nada para cobrar (no se entregó nada). No corresponde cargo.',
   SIN_ENTREGA_REGISTRADA: 'Primero hay que registrar la entrega del extra.', MOTIVO_OBLIGATORIO: 'Escribí el motivo del rechazo.',
   CAMPO_NO_PERMITIDO: 'La solicitud tenía datos que no se permiten.', REQUIERE_REVISION: 'Los datos guardados no son coherentes. Requiere revisión: no se aplicó ningún cambio.',
+  PRODUCTO_DUPLICADO: 'Hay un producto repetido en el día. Juntalo en una sola línea.', CANTIDAD_INVALIDA: 'Cada producto necesita una cantidad mayor que 0.',
+  LINEAS_INVALIDAS: 'Revisá los productos y cantidades del día.', RECURRENTE_MODIFICADO: 'El habitual cambió mientras se editaba. Actualizá y volvé a intentarlo.',
+  SIN_RECURRENTE_PARA_FECHA: 'La persona no tiene habitual ese día: no corresponde “Hoy no pedir”.', SIN_EXCEPCION_VIGENTE: 'No hay un pedido vigente para esa fecha que se pueda anular.',
 };
 const OK_TXT = {
   PEDIDO_REGISTRADO: 'Pedido registrado.', VERSION_SUPERADA: 'Pedido registrado (ya había una versión más nueva).',
@@ -61,6 +70,7 @@ const OK_TXT = {
   EXTRA_REGISTRADO_APROBADO: 'Extra cargado y aprobado.', EXTRA_SOLICITADO: 'Extra solicitado.', EXTRA_APROBADO: 'Extra aprobado.', EXTRA_RECHAZADO: 'Extra rechazado.',
   ENTREGA_REGISTRADA: 'Entrega registrada.', ENTREGA_REGISTRADA_CON_CARGO: 'Entrega registrada. Se generó el cargo del extra.',
   FINANZAS_RECUPERADAS: 'Se generó el cargo pendiente del extra.', OPERACION_YA_PROCESADA: 'La operación ya estaba registrada. No se duplicó.',
+  HABITUAL_DIA_EDITADO: 'Día del habitual actualizado.', HOY_NO_PEDIR_REGISTRADO: 'Listo: ese día la persona no recibe pedido. El habitual no cambia.', PEDIDO_ANULADO: 'Se anuló el pedido de esa fecha.',
 };
 function avisoNegocio(r) {
   if (r.success) return el('div', { class: 'notice ok', role: 'status', 'data-codigo': r.codigo }, OK_TXT[r.codigo] || r.mensaje || 'Operación realizada.', el('span', { class: 'code', text: r.codigo }));
@@ -526,12 +536,21 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     const motivo = d.modificable ? null : (MSJ[d.motivo_no_modificable] || 'No se puede modificar en este momento.');
     const bCargar = d.modificable && persona ? el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'btn-pedido-normal', 'data-accion': 'cargar-pedido-normal',
       onclick: () => abrirPedidoNormal(d, () => cargarPedido(z)) }, d.origen === 'sin_pedido' ? 'Cargar pedido para esta fecha' : 'Cambiar el pedido de esta fecha') : null;
-    montar(z, el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-pedido', text: 'Pedido del ' + fmtMin(fecha) }), el('span', { class: 'spacer' }), bCargar),
+    const excepcionVacia = d.origen === 'solo_por_hoy' && d.sin_entrega === true;
+    const recargarPedido = () => cargarPedido(z);
+    const bHoyNo = d.modificable && persona && d.tiene_habitual && !excepcionVacia ? botonFecha('btn-hoy-no-pedir', 'Hoy no pedir', 'hoy_no_pedir', 'Hoy no pedir',
+      'Ese día la persona no recibe su habitual. El habitual de los demás días no cambia.', 'Sí, no pedir ese día', recargarPedido) : null;
+    const bVolver = d.modificable && persona && d.origen === 'solo_por_hoy' ? botonFecha('btn-volver-habitual', 'Volver al habitual', 'anular_pedido_fecha', 'Volver al habitual',
+      'Se anula el cambio de esta fecha y la persona vuelve a recibir su habitual.', 'Volver al habitual', recargarPedido) : null;
+    const bCancelar = d.modificable && persona && d.origen === 'pedido_nuevo_no_recurrente' && !d.tiene_habitual ? botonFecha('btn-cancelar-pedido', 'Cancelar pedido', 'anular_pedido_fecha', 'Cancelar pedido',
+      'Se anula el pedido de esta fecha. La persona no recibe nada ese día.', 'Sí, cancelar pedido', recargarPedido) : null;
+    montar(z, el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-pedido', text: 'Pedido del ' + fmtMin(fecha) }), el('span', { class: 'spacer' }), bCargar, bHoyNo, bVolver, bCancelar),
       el('div', { class: 'chips' }, chipOrigen(d.origen), d.modificable ? el('span', { class: 'chip ok', 'data-modificable': 'true', text: 'Se puede modificar' }) : el('span', { class: 'chip off', 'data-modificable': 'false', text: 'No modificable' }),
         Number.isInteger(d.version_nro) ? el('span', { class: 'chip', text: 'Versión ' + d.version_nro }) : null),
       motivo ? el('div', { class: 'notice info', 'data-codigo': d.motivo_no_modificable }, motivo, el('span', { class: 'code', text: d.motivo_no_modificable || '' })) : null,
-      d.sin_entrega ? el('p', { class: 'small', text: 'Para esta fecha la persona no recibe productos (cantidades en 0).' }) : null,
-      d.origen === 'sin_pedido' ? el('p', { class: 'muted', text: 'No tiene pedido para esta fecha.' }) : listaLineas(d.lineas),
+      excepcionVacia ? el('p', { class: 'small', 'data-hoy-no-pedir': 'true', text: '“Hoy no pedir”: para esta fecha la persona no recibe productos. El habitual no cambia.' })
+        : d.sin_entrega ? el('p', { class: 'small', text: 'Para esta fecha la persona no recibe productos (cantidades en 0).' }) : null,
+      d.origen === 'sin_pedido' ? el('p', { class: 'muted', text: 'No tiene pedido para esta fecha.' }) : excepcionVacia ? null : listaLineas(d.lineas),
       (d.avisos || []).map(x => el('div', { class: 'notice info small', 'data-codigo': x.codigo }, x.codigo === 'PEDIDO_NUEVO_CON_RECURRENTE' ? 'Hay un pedido nuevo cargado que no se toma porque la persona tiene habitual ese día.'
         : x.codigo === 'SOLO_POR_HOY_SIN_RECURRENTE' ? 'Hay un “solo por hoy” cargado que no se toma porque la persona no tiene habitual ese día.' : x.codigo)),
       salRep,
@@ -542,6 +561,16 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     return el('ul', { class: 'pp-lineas' }, ls.map(l => el('li', { 'data-producto': String(l.producto_id || '') },
       el('span', { class: 'pp-prod', text: str(l.producto) || str(l.detalle_libre) || 'Producto' }), el('span', { class: 'pp-cant', text: cant(l.cantidad, l.unidad) }),
       str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null)));
+  }
+  // Acción de la fecha (hoy_no_pedir / anular_pedido_fecha) sobre la persona y el rol elegidos: confirmación → escritura idempotente → recarga.
+  function botonFecha(id, texto, accion, titulo, pregunta, etiqueta, alExito) {
+    const b = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id, 'data-accion': id.replace(/^btn-/, '') }, texto);
+    b.addEventListener('click', conBloqueo(b, async () => {
+      if (!(await confirmar(titulo + ' — ' + (persona.nombre || pid) + ' · ' + fmtCorta(fecha), pregunta, etiqueta))) return;
+      montar(avisos);
+      await escribir(ctx, avisos, accion, { persona_id: pid, rol_pedido: rol, fecha }, async (r) => { montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
+    }, 'Enviando…'));
+    return b;
   }
   function abrirPedidoNormal(d, alExito) {
     const ed = editorLineas(apoyo.productos, d.origen === 'sin_pedido' ? [] : (d.lineas || []).filter(l => Number.isInteger(l.producto_id)), { idBase: 'pn' });
@@ -584,19 +613,23 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     }
     const diasConLinea = d.dias.map(x => x.dia);
     const bAgregar = persona && diasConLinea.length < 7 ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-agregar-dia', onclick: () => abrirHabitual('agregar_dia', diasConLinea, recargar) }, 'Agregar día') : null;
+    const dias = d.dias.slice().sort((a, b) => DIAS.indexOf(a.dia) - DIAS.indexOf(b.dia));
     montar(z, head(bAgregar),
-      el('div', { class: 'hab-dias', 'data-habitual': 'si' }, d.dias.map(dia => el('div', { class: 'hab-dia', 'data-dia': dia.dia },
-        el('div', { class: 'hab-dia-head' }, el('strong', { text: DIA_TXT[dia.dia] || dia.dia }), dia.sin_pedido_hoy ? el('span', { class: 'chip warn', text: 'Sin entrega (cantidad 0)' }) : null),
-        dia.lineas.map(l => {
-          const b = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'editar-habitual', 'data-recurrente': String(l.pedido_recurrente_id) }, 'Editar');
-          b.addEventListener('click', () => abrirCambio(l, dia.dia, recargar));
-          return el('div', { class: 'hab-linea', 'data-recurrente': String(l.pedido_recurrente_id) },
+      el('div', { class: 'hab-dias', 'data-habitual': 'si' }, dias.map(dia => {
+        const productos = dia.lineas.filter(l => !esAncla(l));
+        const log = logisticaDia(dia.lineas);
+        const b = persona ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'editar-dia-habitual', 'data-dia': dia.dia }, 'Editar día') : null;
+        if (b) b.addEventListener('click', () => abrirDia(dia.dia, productos, log, recargar));
+        return el('div', { class: 'hab-dia', 'data-dia': dia.dia },
+          el('div', { class: 'hab-dia-head' }, el('strong', { text: DIA_TXT[dia.dia] || dia.dia }),
+            el('span', { class: 'chips' }, el('span', { class: 'chip', 'data-salida': log.salida || '', text: salidaTxt(log.salida) }),
+              el('span', { class: 'chip', 'data-repartidor': log.repartidor_persona_id || '', text: log.repartidor_persona_id ? nombreDe(apoyo, log.repartidor_persona_id) : 'Sin repartidor' }),
+              productos.length ? null : el('span', { class: 'chip warn', 'data-ancla': 'true', text: 'Solo logística' })),
+            el('span', { class: 'spacer' }), b),
+          productos.map(l => el('div', { class: 'hab-linea', 'data-recurrente': String(l.pedido_recurrente_id) },
             el('span', { class: 'hab-prod' }, el('span', { text: (str(l.producto) || str(l.detalle_libre) || 'Producto') + ' · ' + cant(l.cantidad, l.unidad) }),
-              str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null),
-            el('span', { class: 'chips' }, el('span', { class: 'chip', 'data-salida': l.salida || '', text: salidaTxt(l.salida) }),
-              el('span', { class: 'chip', 'data-repartidor': l.repartidor_persona_id || '', text: l.repartidor_persona_id ? nombreDe(apoyo, l.repartidor_persona_id) : 'Sin repartidor' })),
-            b);
-        })))),
+              str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null))));
+      })),
       el('p', { class: 'muted small', text: 'Los cambios del habitual no se pueden hacer mientras se cierra la producción (desde las 22:00 hasta el cierre). Las fechas ya cerradas no cambian.' }));
   }
   function abrirHabitual(accion, diasOcupados, alExito) {
@@ -617,36 +650,37 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
       await escribir(ctx, zona, accion, campos, async (r) => { m.cerrar(); montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
     }, 'Guardando…'));
   }
-  function abrirCambio(l, dia, alExito) {
-    const ed = editorLineas(apoyo.productos, [l], { idBase: 'cv', conSalida: true, reps: repartidores(apoyo) });
-    // Una sola fila: se quita el botón de agregar/quitar para no mezclar con altas.
-    for (const x of ed.nodo.querySelectorAll('[data-accion="agregar-linea"], [data-accion="quitar-linea"]')) x.remove();
-    const fila = ed.nodo.querySelector('.lin-fila');
-    if (fila) { const s1 = fila.querySelector('select[id^="cv-sal-"]'), s2 = fila.querySelector('select[id^="cv-rep-"]'); if (s1) s1.value = l.salida || ''; if (s2) s2.value = l.repartidor_persona_id || ''; }
-    const zona = el('div', { class: 'stack', id: 'cv-aviso' });
-    const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-cambio' }, 'Guardar cambio');
+  // Editar día completo (editar_habitual_dia): todas las líneas del día (agregar / quitar / cantidades > 0, sin repetidos) + salida y repartidor del DÍA.
+  // La logística se envía solo si cambió. El historial anterior se conserva (lo versiona Recurrentes Cambios PROD).
+  function abrirDia(dia, productos, log, alExito) {
+    const ed = editorLineas(apoyo.productos, productos, { idBase: 'hd' });
+    const sSal = el('select', { class: 'select', id: 'hd-salida' }, el('option', { value: '', text: 'Sin salida' }), SALIDAS.map(x => el('option', { value: x, text: salidaTxt(x) })));
+    const sRep = el('select', { class: 'select', id: 'hd-repartidor' }, el('option', { value: '', text: 'Sin repartidor' }), repartidores(apoyo).map(p => el('option', { value: p.persona_id, text: str(p.nombre) || p.persona_id })));
+    if (log.salida && !SALIDAS.includes(log.salida)) sSal.appendChild(el('option', { value: log.salida, text: salidaTxt(log.salida) }));
+    if (log.repartidor_persona_id && !repartidores(apoyo).some(p => p.persona_id === log.repartidor_persona_id)) sRep.appendChild(el('option', { value: log.repartidor_persona_id, text: nombreDe(apoyo, log.repartidor_persona_id) }));
+    sSal.value = log.salida || ''; sRep.value = log.repartidor_persona_id || '';
+    const zona = el('div', { class: 'stack', id: 'hd-aviso' });
+    const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-dia' }, 'Guardar día');
     const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-      el('p', { class: 'muted small', text: 'Cambia esta línea del habitual del ' + (DIA_TXT[dia] || dia) + '. Cantidad 0 = ese día no se entrega este producto. El historial anterior se conserva.' }),
+      el('p', { class: 'muted small', text: 'Habitual completo del ' + (DIA_TXT[dia] || dia).toLowerCase() + ': agregá, quitá o cambiá productos y cantidades. Salida y repartidor valen para todo el día.' }),
+      el('div', { class: 'form-grid two' }, el('div', { class: 'field' }, el('label', { for: 'hd-salida', text: 'Salida del día' }), sSal),
+        el('div', { class: 'field' }, el('label', { for: 'hd-repartidor', text: 'Repartidor del día' }), sRep)),
       ed.nodo, b, zona);
-    const m = modal('Editar habitual — ' + (persona.nombre || pid), form);
+    const m = modal('Editar día — ' + (DIA_TXT[dia] || dia) + ' · ' + (persona.nombre || pid), form);
+    const firma = (ls) => JSON.stringify(ls.map(l => [l.producto_id, l.cantidad, str(l.detalle_libre)]).sort((x, y) => x[0] - y[0]));
     form.addEventListener('submit', conBloqueo(b, async () => {
       montar(zona);
-      const f = ed.nodo.querySelector('.lin-fila');
-      const pidProd = Number(f.querySelector('select[id^="cv-prod-"]').value);
-      const q = leerNum(f.querySelector('input[id^="cv-cant-"]').value);
-      if (!Number.isInteger(pidProd) || pidProd <= 0) return montar(zona, aviso('error', 'Elegí el producto.'));
-      if (!(q >= 0)) return montar(zona, aviso('error', 'La cantidad debe ser 0 o más.'));
-      const det = f.querySelector('input[id^="cv-det-"]').value.trim() || null;
-      const sal = f.querySelector('select[id^="cv-sal-"]').value || null;
-      const rep = f.querySelector('select[id^="cv-rep-"]').value || null;
-      const fila = { pedido_recurrente_id: l.pedido_recurrente_id };
-      if (pidProd !== l.producto_id) { fila.producto_id = pidProd; const prod = apoyo.productos.find(p => p.producto_id === pidProd); if (prod && prod.unidad) fila.unidad = prod.unidad; }
-      if (q !== l.cantidad) fila.cantidad = q;
-      if (det !== (l.detalle_libre || null)) fila.detalle_libre = det;
-      if (sal !== (l.salida || null)) fila.salida = sal;
-      if (rep !== (l.repartidor_persona_id || null)) fila.repartidor_persona_id = rep;
-      if (Object.keys(fila).length === 1) return montar(zona, aviso('info', 'No hay cambios para guardar.'));
-      await escribir(ctx, zona, 'cambio_vigente', { persona_id: pid, alcance: 'dias_concretos', filas: [fila] }, async (r) => { m.cerrar(); montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
+      const l = ed.leer();
+      if (l.error) return montar(zona, aviso('error', l.error));
+      const prods = l.lineas.map(x => x.producto_id);
+      if (new Set(prods).size !== prods.length) return montar(zona, aviso('error', 'Hay un producto repetido: juntalo en una sola línea.'));
+      const logistica = {};
+      if ((sSal.value || null) !== (log.salida || null)) logistica.salida = sSal.value || null;
+      if ((sRep.value || null) !== (log.repartidor_persona_id || null)) logistica.repartidor_persona_id = sRep.value || null;
+      if (firma(l.lineas) === firma(productos) && !Object.keys(logistica).length) return montar(zona, aviso('info', 'No hay cambios para guardar.'));
+      const campos = { persona_id: pid, dia_semana: dia, lineas: l.lineas };
+      if (Object.keys(logistica).length) campos.logistica = logistica;
+      await escribir(ctx, zona, 'editar_habitual_dia', campos, async (r) => { m.cerrar(); montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
     }, 'Guardando…'));
   }
 
