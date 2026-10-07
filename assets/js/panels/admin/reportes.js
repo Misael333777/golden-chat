@@ -17,7 +17,9 @@ const tabla = (cols, filas, id) => el('div', { class: 'tabla rep-tabla', id }, e
 const cantidades = (p) => (p.cantidades || []).map(c => num(c.cantidad) + ' ' + (c.unidad || '')).join(' + ') || '—';
 const ADV = { EXTRA_FUERA_DEL_MODELO: 'Extra fuera del circuito', AVISOS_LOGICA_PRODUCCION: 'Avisos de la lógica de producción', CIERRE_OFICIAL_SIN_SNAPSHOT: 'Cierre sin planilla congelada',
   SNAPSHOT_FORMATO_NO_SOPORTADO: 'Planilla congelada con formato viejo', VALOR_NEGATIVO_SNAPSHOT: 'Valores negativos en la planilla congelada', CIERRES_DUPLICADOS: 'Cierres duplicados',
-  SIN_CONVERSION_A_KILOS: 'Unidades sin conversión a kilos', HABITUAL_Y_SOLO_POR_HOY_MISMA_FECHA: 'Habitual y solo por hoy en la misma fecha', CIERRE_NO_CERRADO: 'Cierre no cerrado' };
+  SIN_CONVERSION_A_KILOS: 'Productos que no suman a TOTAL KILOS (solo suma Pan Francés; no es un error)', HABITUAL_Y_SOLO_POR_HOY_MISMA_FECHA: 'Habitual y solo por hoy en la misma fecha', CIERRE_NO_CERRADO: 'Cierre no cerrado',
+  SIN_UNIDAD: 'Renglones sin unidad', PAN_FRANCES_UNIDAD_INVALIDA: 'Pan Francés en una unidad distinta de kg', PERIODO_CON_REGLAS_DISTINTAS: 'El período incluye cierres anteriores al cambio de TOTAL KILOS (se informan aparte)' };
+const KG_PF = 'Pan Francés — kg';
 
 export function vistaReportes(ctx, cont) {
   if (!st.desde) { st.hasta = hoyART(); st.desde = new Date(Date.parse(st.hasta + 'T12:00:00Z') - 6 * 86400e3).toISOString().slice(0, 10); st.mes = st.hasta.slice(0, 7); }
@@ -66,30 +68,30 @@ export function vistaReportes(ctx, cont) {
     if (tipo === 'reportes_pedidos') {
       const pe = d.pedidos_efectivos || {}, ex = d.extras || {};
       return [el('div', { class: 'prd-tiles' }, tile('Pedidos', num(pe.total), 'pedidos'), tile('Habituales', num(pe.recurrente)), tile('Solo por hoy', num(pe.solo_por_hoy)), tile('Pedidos nuevos', num(pe.pedido_nuevo_no_recurrente)),
-        tile('Kilos', kg(d.kilos), 'kilos'), tile('Extras solicitados', num(ex.solicitados))),
-        tabla(['Fecha', 'Pedidos', 'Renglones', 'Kilos', 'Extras', 'Fuente'], (d.por_fecha || []).map(x => [fmt(x.fecha), num((x.pedidos_efectivos || {}).total), num(x.renglones), kg(x.kilos), num((x.extras || {}).solicitados), x.fecha_cerrada ? 'Cerrada' : 'Actual']), 'rep-por-fecha')];
+        tile(KG_PF, kg(d.kilos), 'kilos'), tile('Extras solicitados', num(ex.solicitados))),
+        tabla(['Fecha', 'Pedidos', 'Renglones', KG_PF, 'Extras', 'Fuente'], (d.por_fecha || []).map(x => [fmt(x.fecha), num((x.pedidos_efectivos || {}).total), num(x.renglones), kg(x.kilos), num((x.extras || {}).solicitados), x.fecha_cerrada ? 'Cerrada' : 'Actual']), 'rep-por-fecha')];
     }
     if (tipo === 'reportes_productos') {
       const pn = d.pedidos_normales || {}, sp = pn.sin_producto_id || {};
-      return [tabla(['Producto', 'Cantidad', 'Kilos', 'Renglones'], (pn.productos || []).map(x => [x.nombre || ('Producto ' + x.producto_id), cantidades(x), x.kilos_completos === false ? kg(x.kilos) + ' (incompleto)' : kg(x.kilos), num(x.renglones)]), 'rep-productos'),
-        sp.renglones ? el('p', { class: 'muted small', text: sp.renglones + ' renglón(es) sin producto (detalle libre): ' + kg(sp.kilos) + '. Se listan aparte, no se agrupan por texto.' }) : null,
+      return [tabla(['Producto', 'Cantidad', KG_PF, 'Renglones'], (pn.productos || []).map(x => [x.nombre || ('Producto ' + x.producto_id), cantidades(x), typeof x.kilos === 'number' ? kg(x.kilos) : 'no suma', num(x.renglones)]), 'rep-productos'),
+        sp.renglones ? el('p', { class: 'muted small', id: 'rep-sin-producto', text: sp.renglones + ' renglón(es) sin producto (detalle libre), se listan aparte y no suman a Pan Francés' + (sp.renglones_a_revisar ? '; ' + sp.renglones_a_revisar + ' sin unidad (a revisar).' : '.') }) : null,
         d.filtro_catalogo ? el('p', { class: 'muted small', text: 'Filtro: ' + (d.filtro_catalogo.criterio || d.filtro_catalogo.catalogo) + '. Excluidos sin producto: ' + (d.filtro_catalogo.renglones_sin_producto_id_excluidos || 0) + '.' }) : null,
-        d.extras && (d.extras.productos || []).length ? el('div', { class: 'stack' }, el('strong', { text: 'Extras aprobados (aparte)' }), tabla(['Producto', 'Aprobado', 'Entregado', 'Kilos aprobados'], d.extras.productos.map(x => [x.nombre || ('Producto ' + x.producto_id),
-          num(x.cantidad_aprobada) + ' ' + (x.unidad || ''), num(x.cantidad_entregada) + ' ' + (x.unidad || ''), kg(x.kilos_aprobados)]), 'rep-productos-extras')) : null];
+        d.extras && (d.extras.productos || []).length ? el('div', { class: 'stack' }, el('strong', { text: 'Extras aprobados (aparte)' }), tabla(['Producto', 'Aprobado', 'Entregado', KG_PF], d.extras.productos.map(x => [x.nombre || ('Producto ' + x.producto_id),
+          num(x.cantidad_aprobada) + ' ' + (x.unidad || ''), num(x.cantidad_entregada) + ' ' + (x.unidad || ''), typeof x.kilos_aprobados === 'number' ? kg(x.kilos_aprobados) : 'no suma']), 'rep-productos-extras')) : null];
     }
     if (tipo === 'reportes_clientes') {
       return [el('p', { class: 'muted small', text: (d.total_clientes_con_pedido ?? (d.clientes || []).length) + ' cliente(s) con pedido.' }),
-        tabla(['Cliente', 'Días con pedido', 'Pedidos', 'Kilos', 'Frecuencia'], (d.clientes || []).map(x => [x.nombre || x.persona_id, num(x.dias_con_pedido_efectivo), num((x.pedidos_efectivos || {}).total), kg(x.kilos_validos), (x.frecuencia || {}).descripcion || '—']), 'rep-clientes')];
+        tabla(['Cliente', 'Días con pedido', 'Pedidos', KG_PF, 'Frecuencia'], (d.clientes || []).map(x => [x.nombre || x.persona_id, num(x.dias_con_pedido_efectivo), num((x.pedidos_efectivos || {}).total), kg(x.kilos_validos), (x.frecuencia || {}).descripcion || '—']), 'rep-clientes')];
     }
     if (tipo === 'reportes_repartidores') {
       const sr = d.sin_repartidor || {};
-      return [tabla(['Repartidor', 'Días', 'Pedidos', 'Clientes', 'Kilos', 'Extras'], (d.repartidores || []).map(x => { const pn = x.pedidos_normales_asociados || {}; return [x.repartidor_nombre || x.repartidor_persona_id, num(x.dias_con_actividad), num((pn.pedidos || {}).total), num(pn.clientes), kg(pn.kilos_validos), num(((x.extras || {}).resumen || {}).solicitados)]; }), 'rep-repartidores'),
-        sr.pedidos_normales ? el('p', { class: 'muted small', text: 'Sin repartidor: ' + num((sr.pedidos_normales.pedidos || {}).total) + ' pedido(s), ' + kg(sr.pedidos_normales.kilos_validos) + '. Los pedidos normales no tienen registro de entrega.' }) : null];
+      return [tabla(['Repartidor', 'Días', 'Pedidos', 'Clientes', KG_PF, 'Extras'], (d.repartidores || []).map(x => { const pn = x.pedidos_normales_asociados || {}; return [x.repartidor_nombre || x.repartidor_persona_id, num(x.dias_con_actividad), num((pn.pedidos || {}).total), num(pn.clientes), kg(pn.kilos_validos), num(((x.extras || {}).resumen || {}).solicitados)]; }), 'rep-repartidores'),
+        sr.pedidos_normales ? el('p', { class: 'muted small', text: 'Sin repartidor: ' + num((sr.pedidos_normales.pedidos || {}).total) + ' pedido(s), ' + kg(sr.pedidos_normales.kilos_validos) + ' de Pan Francés. Los pedidos normales no tienen registro de entrega.' }) : null];
     }
     const rs = d.resumen || {};
-    return [el('div', { class: 'prd-tiles' }, tile('Días cerrados', num(rs.dias_cerrados_con_snapshot)), tile('Kilos de cierres', kg(rs.kilos_total_cierres)), tile('Días sin cierre', num(rs.dias_no_cerrados)), tile('Kilos de pedidos (sin cierre)', kg(rs.kilos_pedidos_efectivos_no_cerrados))),
-      el('p', { class: 'muted small', text: 'Las fechas cerradas muestran el total congelado; las demás, los kilos de pedidos sin líneas manuales ni cálculos. No se suman entre sí.' }),
-      tabla(['Fecha', 'Fuente', 'Total / kilos', 'Datos a confirmar', ''], (d.por_fecha || []).map(x => [fmt(x.fecha), x.fecha_cerrada ? 'Planilla cerrada' : 'Pedidos actuales',
-        x.estado_fuente !== 'OK' ? 'No disponible' : (x.fecha_cerrada ? kg(x.total_kilos) : kg(x.kilos_pedidos_efectivos)), num((x.datos_a_confirmar || {}).cantidad), el('a', { href: '#/admin/produccion/' + x.fecha, class: 'btn btn-ghost btn-sm', text: 'Ver' })]), 'rep-produccion')];
+    return [el('div', { class: 'prd-tiles' }, tile('Días cerrados', num(rs.dias_cerrados_con_snapshot)), tile(KG_PF + ' (cierres)', kg(rs.kilos_total_cierres)), rs.dias_cerrados_regla_anterior ? tile('Cierres con la regla anterior', kg(rs.kilos_total_cierres_regla_anterior) + ' · ' + num(rs.dias_cerrados_regla_anterior) + ' día(s)') : null, tile('Días sin cierre', num(rs.dias_no_cerrados)), tile(KG_PF + ' (sin cierre)', kg(rs.kilos_pedidos_efectivos_no_cerrados))),
+      el('p', { class: 'muted small', text: 'TOTAL KILOS = solo Pan Francés. Las fechas cerradas muestran el total congelado; los cierres anteriores al cambio conservan su regla (podían incluir otros productos en kg) y se muestran aparte. Las fechas sin cierre muestran Pan Francés de pedidos, sin líneas manuales ni cálculos. No se suman entre sí.' }),
+      tabla(['Fecha', 'Fuente', 'TOTAL KILOS', 'Datos a confirmar', ''], (d.por_fecha || []).map(x => [fmt(x.fecha), x.fecha_cerrada ? 'Planilla cerrada' : 'Pedidos actuales',
+        x.estado_fuente !== 'OK' ? 'No disponible' : (x.fecha_cerrada ? kg(x.total_kilos) + (x.regla_total_kilos === 'ANTERIOR_AL_CAMBIO' ? ' (regla anterior)' : '') : kg(x.kilos_pedidos_efectivos)), num((x.datos_a_confirmar || {}).cantidad), el('a', { href: '#/admin/produccion/' + x.fecha, class: 'btn btn-ghost btn-sm', text: 'Ver' })]), 'rep-produccion')];
   }
 }

@@ -3,7 +3,8 @@
 //   produccion_fecha (Consultas: produccion_efectiva + aclaraciones de la fecha + resumen del cierre oficial),
 //   reportes_produccion (Historial/Reportes: snapshot congelado de la planilla cerrada o pedidos efectivos de una fecha abierta),
 //   aclaraciones_listar, y las escrituras existentes de Admin Gestion: agregar/editar/anular_linea_manual,
-//   crear/editar/activar/desactivar_aclaracion.
+//   crear/editar/activar/desactivar_aclaracion, y guardar_valores_produccion (cinco valores manuales por fecha).
+// TOTAL KILOS = solo Pan Francés (lo decide el backend); los demás productos se muestran con su cantidad y unidad y no suman.
 // Acá no se recalculan totales ni cálculos de planilla: se muestran tal como los devuelve el backend.
 // No hay cierre manual ni acceso a Drive desde la página: el cierre y los archivos los maneja el flujo de Planillas.
 import * as ops from '../../ops.js';
@@ -27,6 +28,11 @@ const salidaTxt = (s) => str(s) ? s.charAt(0).toUpperCase() + s.slice(1) : 'Sin 
 const ESTADO_TXT = { abierta: 'Abierta', en_cierre: 'En cierre', cerrada: 'Cerrada', sin_cierre: 'Sin cierre registrado', requiere_revision: 'Requiere revisión' };
 const ESTADO_CHIP = { abierta: 'ok', en_cierre: 'warn', cerrada: 'gold', sin_cierre: 'warn', requiere_revision: 'off' };
 export const PEND_TXT = {
+  UNIDAD_NO_DETERMINADA: 'Línea sin unidad: está en la planilla, pero revisá qué se pidió',
+  PAN_FRANCES_UNIDAD_INVALIDA: 'Pan Francés en una unidad distinta de kg: está en la planilla y no suma',
+  LINEA_MANUAL_NO_SUMA: 'Línea manual marcada para sumar que no es Pan Francés en kg: no suma',
+  VALORES_PRODUCCION_DUPLICADOS: 'Valores de producción duplicados para la fecha',
+  KILOS_INDETERMINADOS: 'Kilos no determinados (regla anterior)',
   CANTIDAD_INVALIDA: 'Cantidad inválida (0 o vacía): la línea no entra en la producción',
   PERSONA_NO_ENCONTRADA: 'Pedido de una persona que no existe',
   SIN_ROL_REPARTIDOR: 'Pedido de repartidor de alguien sin rol de repartidor activo',
@@ -53,10 +59,13 @@ const MSJ = {
   ACLARACION_YA_ACTIVA: 'La aclaración ya estaba activa.', ACLARACION_YA_INACTIVA: 'La aclaración ya estaba inactiva.',
   OPERACION_ID_REUTILIZADO: 'Esa operación ya se había usado con otros datos. Volvé a intentarlo como una operación nueva.',
   SIN_CAMBIOS: 'No hay cambios para guardar.', MOTIVO_OBLIGATORIO: 'Escribí el motivo.',
+  VALOR_INVALIDO: 'Algún valor no es válido: usá números de 0 a 100000 (hasta 3 decimales).', VALORES_INCOMPLETOS: 'Faltan valores para guardar.',
+  FECHA_INVALIDA: 'La fecha no es válida para cargar valores (tiene que ser a partir de mañana).',
 };
 const OK_TXT = { LINEA_MANUAL_REGISTRADA: 'Línea agregada.', LINEA_MANUAL_EDITADA: 'Línea editada (la anterior quedó en el historial).', LINEA_MANUAL_ANULADA: 'Línea anulada.',
   ACLARACION_CREADA: 'Aclaración creada.', ACLARACION_EDITADA: 'Aclaración editada.', ACLARACION_ACTIVADA: 'Aclaración activada.', ACLARACION_DESACTIVADA: 'Aclaración desactivada.',
-  OPERACION_YA_PROCESADA: 'La operación ya estaba registrada. No se duplicó.' };
+  OPERACION_YA_PROCESADA: 'La operación ya estaba registrada. No se duplicó.',
+  VALORES_PRODUCCION_REGISTRADOS: 'Valores de producción guardados.', VALORES_PRODUCCION_ACTUALIZADOS: 'Valores de producción actualizados.', VALORES_SIN_CAMBIOS: 'No había cambios para guardar.' };
 function avisoNegocio(r) {
   if (r.success) return el('div', { class: 'notice ok', role: 'status', 'data-codigo': r.codigo }, OK_TXT[r.codigo] || r.mensaje || 'Listo.',
     r.datos && r.datos.aviso === 'KILOS_MANUAL_IGNORADO' ? el('span', { class: 'small', text: ' Los kilos se calcularon con el peso del producto (se ignoró el valor ingresado).' }) : null,
@@ -128,6 +137,9 @@ function vistaPlanilla(ctx, zona) {
       bloqueEstado(d, rep, advRep, b),
       // Fecha con cierre registrado: se muestra SOLO lo congelado (o el aviso de que no se puede leer); nunca se reconstruye con datos actuales.
       d.estado === 'cerrada' || (d.cierre && d.cierre.existe) ? bloqueCerrada(rep) : bloqueAbierta(d, rep),
+      // Valores manuales y capacidad: solo mientras no hay cierre (con cierre, los valores son los congelados de la planilla).
+      d.cierre && d.cierre.existe ? null : bloqueValores(ctx, d, avisos, cargar),
+      d.cierre && d.cierre.existe ? null : bloqueCapacidad(d),
       bloqueLineas(ctx, d, rep, productos, avisos, cargar),
       bloqueAclaracionesFecha(ctx, d),
       // Con cierre registrado, los datos a confirmar válidos son los congelados (se ven en la planilla); los actuales no aplican.
@@ -199,13 +211,14 @@ function bloqueAbierta(d, rep) {
   const nombreRep = new Map(); for (const r of d.renglones) if (r.repartidor_persona_id) nombreRep.set(r.repartidor_persona_id, r.repartidor_persona_id);
   const kRep = new Map(((rep && rep.agrupacion_por_repartidor) || []).map(x => [x.repartidor_persona_id || '', x]));
   const nombreDe = (id) => { const x = kRep.get(id); return x && x.repartidor_nombre ? x.repartidor_nombre : id; };
-  const totales = rep && rep.estado_fuente === 'OK' ? el('div', { class: 'prd-tiles', id: 'prd-calculos' },
-    el('div', { class: 'precio-tile prd-tile', 'data-calculo': 'kilos_pedidos' }, el('span', { class: 'precio-label', text: 'Kilos de pedidos' }), el('span', { class: 'precio-valor', text: kg(rep.kilos_pedidos_efectivos) }),
-      el('span', { class: 'hint', text: 'Sin líneas manuales.' })),
-    el('div', { class: 'precio-tile prd-tile', 'data-calculo': 'total_kilos' }, el('span', { class: 'precio-label', text: 'TOTAL KILOS' }), el('span', { class: 'precio-valor', text: 'Al cerrar' }),
-      el('span', { class: 'hint', text: 'Turno noche, harina y masas se calculan al cerrar la planilla.' })),
-    rep.renglones_sin_kilos ? el('div', { class: 'precio-tile prd-tile prd-tile-alerta', 'data-calculo': 'sin_kilos' }, el('span', { class: 'precio-label', text: 'Sin kilos' }), el('span', { class: 'precio-valor', text: String(rep.renglones_sin_kilos) }),
-      el('span', { class: 'hint', text: 'Renglones sin conversión a kilos.' })) : null) : null;
+  const rs = d.resumen || {};
+  const totales = el('div', { class: 'prd-tiles', id: 'prd-calculos' },
+    el('div', { class: 'precio-tile prd-tile', 'data-calculo': 'total_kilos' }, el('span', { class: 'precio-label', text: 'TOTAL KILOS (Pan Francés)' }), el('span', { class: 'precio-valor', text: kg(rs.kilos_pan_frances) }),
+      el('span', { class: 'hint', text: 'Solo Pan Francés en kg. Las líneas manuales de Pan Francés se suman al cerrar.' })),
+    el('div', { class: 'precio-tile prd-tile', 'data-calculo': 'no_suman' }, el('span', { class: 'precio-label', text: 'Otros productos' }), el('span', { class: 'precio-valor', text: String(rs.renglones_no_suman || 0) }),
+      el('span', { class: 'hint', text: 'Líneas en la planilla con su cantidad y unidad. No suman a TOTAL KILOS (no es un error).' })),
+    rs.renglones_sin_kilos ? el('div', { class: 'precio-tile prd-tile prd-tile-alerta', 'data-calculo': 'sin_unidad' }, el('span', { class: 'precio-label', text: 'A revisar' }), el('span', { class: 'precio-valor', text: String(rs.renglones_sin_kilos) }),
+      el('span', { class: 'hint', text: 'Líneas sin unidad o Pan Francés fuera de kg. Están en la planilla: ver “Revisar antes del cierre”.' })) : null);
   return el('div', { class: 'card stack', id: 'prd-planilla', 'data-fuente': 'efectiva' },
     el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-pedido', text: d.estado === 'abierta' ? 'Producción efectiva (en curso)' : 'Producción efectiva' })),
     el('p', { class: 'muted small', text: 'Pedidos que entran en la producción según la regla consolidada (habitual, solo por hoy y pedidos nuevos). Los extras de reposición no se incluyen.' }),
@@ -220,7 +233,7 @@ function bloqueAbierta(d, rep) {
           el('ul', { class: 'pp-lineas' }, l.map(r => el('li', { 'data-persona': r.persona_id || '' },
             el('span', { class: 'pp-prod' }, (r.nombre || r.persona_id || '—') + ' · ' + (r.producto || r.detalle_libre || '—')),
             el('span', { class: 'muted small', text: cant(r.cantidad, r.unidad) + (r.origen === 'solo_por_hoy' ? ' · solo por hoy' : r.origen === 'pedido_nuevo_no_recurrente' ? ' · pedido nuevo' : '') }),
-            el('span', { class: 'pp-cant', text: kg(r.kilos) })))))));
+            el('span', { class: 'pp-cant' + (r.cuenta_en_total_kilos ? '' : ' muted small'), 'data-suma': String(r.cuenta_en_total_kilos === true), text: r.cuenta_en_total_kilos ? kg(r.kilos) : 'no suma' })))))));
     })));
 }
 
@@ -232,14 +245,14 @@ function bloqueLineas(ctx, d, rep, productos, avisos, recargar) {
   return el('div', { class: 'card stack', id: 'prd-lineas', 'data-cerrada': String(cerrada) },
     el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-extra', text: 'Otros / extras (líneas manuales)' }), el('span', { class: 'spacer' }), bAgregar),
     cerrada ? el('p', { class: 'muted small', text: 'Planilla cerrada: se muestran las líneas tal como quedaron congeladas. No se pueden cambiar.' })
-      : el('p', { class: 'muted small', text: 'Conceptos que no son pedidos de personas. “Suma al total” cuenta en TOTAL KILOS; si no, es solo informativa. Editar crea una versión nueva y la anterior queda en el historial.' }),
+      : el('p', { class: 'muted small', text: 'Conceptos que no son pedidos de personas. Solo suma a TOTAL KILOS una línea de Pan Francés en kg marcada “Suma al total”; el resto es informativa. Editar crea una versión nueva y la anterior queda en el historial.' }),
     !filas.length ? el('p', { class: 'muted', text: 'Sin líneas manuales.' }) : el('ul', { class: 'pp-lineas', id: 'lista-lineas' }, filas.map(l => {
       const acc = (!cerrada && l.linea_manual_id) ? el('span', { class: 'row' },
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'editar-linea', onclick: () => abrirLinea(ctx, d.fecha, l, productos, avisos, recargar) }, 'Editar'),
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'anular-linea', onclick: () => abrirAnular(ctx, l, avisos, recargar) }, 'Anular')) : null;
       return el('li', { 'data-linea-manual': l.linea_manual_id || '' },
         el('span', { class: 'pp-prod' }, l.concepto || '—', l.observacion ? el('span', { class: 'muted small', text: ' · ' + l.observacion }) : null),
-        el('span', { class: 'muted small', text: (l.cantidad != null ? cant(l.cantidad, l.unidad) + ' · ' : '') + (l.suma_en_total ? 'suma al total' : 'solo informativa') }),
+        el('span', { class: 'muted small', text: (l.cantidad != null ? cant(l.cantidad, l.unidad) + ' · ' : '') + (l.cuenta_en_total_kilos === true || (cerrada && l.suma_en_total) ? 'suma al total' : (l.suma_en_total ? 'marcada para sumar, pero no es Pan Francés en kg' : 'solo informativa')) }),
         el('span', { class: 'pp-cant', text: kg(l.kilos) }), acc);
     })));
 }
@@ -260,7 +273,7 @@ function abrirLinea(ctx, fecha, l, productos, avisos, recargar) {
     el('div', { class: 'form-grid two' }, campo('lm-concepto', 'Concepto', iCon), campo('lm-producto', 'Producto (opcional)', sProd),
       campo('lm-cantidad', 'Cantidad (opcional)', iCant), campo('lm-unidad', 'Unidad (opcional)', iUni),
       campo('lm-kilos', 'Kilos', iKg, 'Si la cantidad está en kg o el producto tiene peso por unidad, el sistema calcula los kilos.'), campo('lm-obs', 'Observación (opcional)', iObs)),
-    el('label', { class: 'check', for: 'lm-suma' }, cSuma, el('span', { text: 'Suma al TOTAL KILOS' })),
+    el('label', { class: 'check', for: 'lm-suma' }, cSuma, el('span', { text: 'Suma al TOTAL KILOS (solo si es Pan Francés en kg)' })),
     b, zona);
   const m = modal((editar ? 'Editar línea — ' : 'Nueva línea — ') + fmtCorta(fecha), form);
   form.addEventListener('submit', conBloqueo(b, async () => {
@@ -309,14 +322,60 @@ function bloqueAclaracionesFecha(ctx, d) {
     a && a.excluidas && a.excluidas.length ? el('p', { class: 'muted small', text: a.excluidas.length + ' aclaración(es) no aplican a esta fecha: ' + [...new Set(a.excluidas.map(x => EXC[x.motivo] || x.motivo))].join(', ') + '.' }) : null);
 }
 
+// Cinco valores MANUALES por fecha. Ninguno se calcula a partir de otro ni del TOTAL KILOS. Se guardan juntos; vacío = sin informar.
+const VALORES = [['produccion_manana', 'Producción mañana'], ['turno_noche_kg', 'Hacer turno noche (kg)'], ['harina_a_usar', 'Harina a usar'], ['masa_1', 'Masa 1'], ['masa_2', 'Masa 2']];
+function bloqueValores(ctx, d, avisos, recargar) {
+  const v = d.valores_produccion || {};
+  const editable = d.estado === 'abierta';
+  const inputs = VALORES.map(([k]) => el('input', { class: 'input', id: 'vp-' + k, type: 'number', min: '0', max: '100000', step: 'any', inputmode: 'decimal', value: typeof v[k] === 'number' ? String(v[k]) : '', disabled: !editable }));
+  const zona = el('div', { class: 'stack', id: 'vp-aviso' });
+  const b = editable ? el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-valores' }, 'Guardar valores') : null;
+  const form = el('form', { class: 'stack', id: 'vp-form', novalidate: true, autocomplete: 'off', 'data-existe': String(v.existe === true) },
+    el('div', { class: 'form-grid two' }, VALORES.map(([k, t], i) => campo('vp-' + k, t, inputs[i]))), b, zona);
+  if (editable) form.addEventListener('submit', conBloqueo(b, async () => {
+    montar(zona);
+    const campos = { fecha_produccion: d.fecha };
+    for (let i = 0; i < VALORES.length; i++) {
+      const x = numOrNull(inputs[i].value);
+      if (Number.isNaN(x) || (x !== null && (x < 0 || x > 100000))) return montar(zona, aviso('error', VALORES[i][1] + ': número de 0 a 100000.'));
+      campos[VALORES[i][0]] = x;
+    }
+    await escribir(ctx, zona, 'guardar_valores_produccion', campos, async (r) => { montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await recargar(); });
+  }, 'Guardando…'));
+  return el('div', { class: 'card stack', id: 'prd-valores', 'data-editable': String(editable) },
+    el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-pedido', text: 'Valores de producción (manuales)' }), el('span', { class: 'spacer' }),
+      el('span', { class: 'chip ' + (v.existe ? 'ok' : 'warn'), text: v.existe ? 'Cargados' : 'Sin cargar' })),
+    el('p', { class: 'muted small', text: editable
+      ? 'Se cargan a mano para esta fecha y se imprimen tal cual en la planilla. Ninguno se calcula a partir de otro. Se pueden editar hasta el corte; al cerrar quedan congelados. Vacío = “No informado”.'
+      : 'La fecha ya no se puede modificar (pasó el corte o está en cierre). Al cerrar, la planilla usa los valores guardados.' }),
+    v.modificado_en ? el('p', { class: 'muted small', text: 'Última modificación: ' + fmtHora(v.modificado_en) }) : null,
+    form);
+}
+// Aviso de ocupación de la planilla ANTES del cierre (estimado por el backend con las capacidades de la plantilla).
+const BLOQUE_TXT = { repartidores: 'Repartidores', salida_1: 'Salida 1', salida_2: 'Salida 2', salida_3: 'Salida 3', salida_4: 'Salida 4', sin_salida: 'Sin salida' };
+function bloqueCapacidad(d) {
+  const c = d.capacidad;
+  if (!c || !Array.isArray(c.bloques)) return null;
+  const msg = c.estado === 'ok' ? 'Todos los pedidos entran en la hoja principal.'
+    : c.estado === 'usa_anexo' ? 'Algunos pedidos no entran en su bloque: van COMPLETOS al Anexo (hoja 2). Ningún pedido se corta.'
+    : 'Los pedidos no entran ni con el Anexo: el cierre va a fallar con aviso (no se genera una planilla incompleta). Revisá salidas o repartidores antes del corte.';
+  return el('div', { class: 'card stack', id: 'prd-capacidad', 'data-estado-capacidad': c.estado },
+    el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-estado', text: 'Ocupación de la planilla' }), el('span', { class: 'spacer' }),
+      el('span', { class: 'chip ' + (c.estado === 'ok' ? 'ok' : (c.estado === 'usa_anexo' ? 'warn' : 'off')), text: c.estado === 'ok' ? 'Entra' : (c.estado === 'usa_anexo' ? 'Usa anexo' : 'No entra') })),
+    el('p', { class: c.estado === 'no_entra' ? 'small' : 'muted small', text: msg + ' (Estimado: el cierre aplica la regla final.)' }),
+    el('div', { class: 'chips' }, c.bloques.map(x => el('span', { class: 'chip' + (x.excede ? ' warn' : ''), 'data-bloque': x.bloque,
+      text: (BLOQUE_TXT[x.bloque] || x.bloque) + ': ' + x.filas + '/' + x.capacidad + (x.personas_a_anexo ? ' · ' + x.personas_a_anexo + ' al anexo' : '') })),
+      c.anexo && c.anexo.filas ? el('span', { class: 'chip warn', 'data-bloque': 'anexo', text: 'Anexo: ' + c.anexo.filas + '/' + c.anexo.capacidad }) : null));
+}
 function bloquePendientes(d) {
   const p = d.pendientes || [];
   return el('div', { class: 'card stack', id: 'prd-pendientes', 'data-pendientes': String(p.length) },
-    el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-estado', text: 'Datos a confirmar' }), el('span', { class: 'spacer' }),
+    el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-estado', text: 'Revisar antes del cierre' }), el('span', { class: 'spacer' }),
       el('span', { class: 'chip ' + (p.length ? 'warn' : 'ok'), text: p.length ? p.length + ' por revisar' : 'Sin pendientes' })),
-    el('p', { class: 'muted small', text: 'Pedidos que la regla de producción deja afuera o no puede ubicar. No se imprimen en la planilla y no bloquean el cierre.' }),
+    el('p', { class: 'muted small', text: 'Solo inconsistencias reales. Las líneas en unidades y los productos que no son Pan Francés NO son errores: están en la planilla y no suman a TOTAL KILOS. Cada caso indica si la línea está o no en la planilla. No bloquean el cierre.' }),
     p.length ? el('ul', { class: 'pp-lineas' }, p.map(x => el('li', { 'data-pendiente-tipo': x.tipo || '' },
       el('span', { class: 'pp-prod', text: pendTxt(x.tipo) }),
+      el('span', { class: 'chip' + (/^incluida|^no_suma/.test(x.efecto || '') ? '' : ' warn'), 'data-efecto': x.efecto || '', text: /^incluida/.test(x.efecto || '') ? 'En la planilla' : (/^no_suma/.test(x.efecto || '') ? 'No suma' : (/^excluida/.test(x.efecto || '') ? 'No entra en la planilla' : 'A revisar')) }),
       el('span', { class: 'muted small', text: [x.persona_id, x.pedido_fecha_id, x.pedido_recurrente_id ? 'habitual #' + x.pedido_recurrente_id : null, x.linea_manual_id].filter(Boolean).join(' · ') }),
       x.persona_id && /^PER-/.test(x.persona_id) ? el('a', { class: 'btn btn-ghost btn-sm', href: '#/admin/pedidos/persona/' + encodeURIComponent(x.persona_id) + '/' + d.fecha }, 'Ver pedido') : null))) : null);
 }
