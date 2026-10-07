@@ -10,7 +10,7 @@ export const RUTA = {
   mi_perfil: 'usuario', mi_catalogo: 'usuario',
   mi_habitual: 'recurrente', cambio_vigente: 'recurrente', editar_habitual_dia: 'recurrente',
   mi_pedido_fecha: 'pedido', crear_pedido_normal: 'pedido', mis_pedidos: 'pedido', hoy_no_pedir: 'pedido', anular: 'pedido',
-  mis_extras: 'extra', solicitar_extra: 'extra', modificar_extra: 'extra', cancelar_extra: 'extra',
+  mis_extras: 'extra', solicitar_extra: 'extra',
   mi_cuenta: 'cuenta',
   mis_casos: 'soporte', solicitar_soporte: 'soporte',
   mis_clientes: 'repartidor',
@@ -42,8 +42,8 @@ export const ORIGEN_TXT = { habitual: 'Tu habitual', solo_por_hoy: 'Solo por ese
 const ORIGEN_CHIP = { habitual: 'gold', solo_por_hoy: 'ok', pedido_nuevo_no_recurrente: 'ok', sin_pedido: '' };
 export const chipOrigen = (o) => el('span', { class: 'chip ' + (ORIGEN_CHIP[o] || ''), 'data-origen': o || 'ninguno', text: ORIGEN_TXT[o] || String(o || '—') });
 export const EXTRA_TXT = { pendiente_admin: 'Pendiente de Golden', solicitado: 'Pendiente de Golden', rechazado: 'Rechazado', aprobado_entrega_pendiente: 'Aprobado · entrega pendiente', aprobado: 'Aprobado',
-  entregado: 'Entregado', entregado_parcial: 'Entregado en parte', no_entregado: 'No entregado', en_revision: 'En revisión', requiere_revision: 'En revisión', anulado: 'Cancelado' };
-const EXTRA_CHIP = { pendiente_admin: 'warn', solicitado: 'warn', rechazado: 'off', aprobado_entrega_pendiente: 'gold', aprobado: 'gold', entregado: 'ok', entregado_parcial: 'ok', no_entregado: 'off', en_revision: 'off', requiere_revision: 'off', anulado: 'off' };
+  entregado: 'Entregado', entregado_parcial: 'Entregado en parte', no_entregado: 'No entregado', en_revision: 'En revisión', requiere_revision: 'En revisión' };
+const EXTRA_CHIP = { pendiente_admin: 'warn', solicitado: 'warn', rechazado: 'off', aprobado_entrega_pendiente: 'gold', aprobado: 'gold', entregado: 'ok', entregado_parcial: 'ok', no_entregado: 'off', en_revision: 'off', requiere_revision: 'off' };
 export const chipExtra = (e) => el('span', { class: 'chip ' + (EXTRA_CHIP[e] || ''), 'data-estado-extra': e || 'ninguno', text: EXTRA_TXT[e] || String(e || '—') });
 
 export const tile = (label, valor, attr) => el('div', { class: 'precio-tile prd-tile', 'data-tile': attr || label }, el('span', { class: 'precio-label', text: label }), el('span', { class: 'precio-valor', text: valor }));
@@ -73,7 +73,7 @@ const MSJ = {
   SIN_EXCEPCION_VIGENTE: 'No hay un cambio para ese día que se pueda deshacer.',
   REQUIERE_REVISION: 'Golden tiene que revisar este pedido. No se cambió nada.',
 };
-const OK_TXT = { PEDIDO_REGISTRADO: 'Pedido registrado.', VERSION_SUPERADA: 'Pedido registrado.', CAMBIO_VIGENTE_APLICADO: 'Tu habitual se actualizó.', EXTRA_SOLICITADO: 'Extra solicitado. Golden lo va a revisar.', EXTRA_MODIFICADO: 'Listo: cambiaste las cantidades del extra.', EXTRA_CANCELADO: 'Listo: cancelaste el extra.',
+const OK_TXT = { PEDIDO_REGISTRADO: 'Pedido registrado.', VERSION_SUPERADA: 'Pedido registrado.', CAMBIO_VIGENTE_APLICADO: 'Tu habitual se actualizó.', EXTRA_SOLICITADO: 'Extra solicitado. Golden lo va a revisar.',
   HABITUAL_DIA_EDITADO: 'Tu habitual se actualizó.', HOY_NO_PEDIR_REGISTRADO: 'Listo: ese día no recibís pedido. Tu habitual no cambia.', PEDIDO_ANULADO: 'Listo: se anuló el pedido de ese día.',
   OPERACION_YA_PROCESADA: 'Ya estaba registrado. No se duplicó.', OK: 'Listo.' };
 export const textoOk = (r) => OK_TXT[r.codigo] || r.mensaje || 'Listo.';
@@ -109,7 +109,8 @@ export async function traer(ctx, accion, campos) {
 export async function catalogo(ctx) {
   const r = await traer(ctx, 'mi_catalogo');
   if (r.error) return r;
-  const productos = (r.datos.productos || []).map(p => ({ producto_id: Number.isInteger(p.product_id) ? p.product_id : p.producto_id, nombre: str(p.nombre) || 'Producto', categoria: str(p.categoria), unidad: str(p.unidad), precio: typeof p.precio === 'number' ? p.precio : null }))
+  const productos = (r.datos.productos || []).map(p => ({ producto_id: Number.isInteger(p.product_id) ? p.product_id : p.producto_id, nombre: str(p.nombre) || 'Producto', categoria: str(p.categoria), unidad: str(p.unidad), precio: typeof p.precio === 'number' ? p.precio : null,
+    imagen_src: str(p.imagen_src) })) // imagen_src: reservado para una futura consulta segura de fotos (hoy el backend no la envía)
     .filter(p => Number.isInteger(p.producto_id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   return { productos, tipo_catalogo: str(r.datos.tipo_catalogo) };
 }
