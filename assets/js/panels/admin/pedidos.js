@@ -7,7 +7,8 @@
 // cantidad 0) se muestra como "Solo logística". 'Hoy no pedir' / 'Volver al habitual' / 'Cancelar pedido' usan las rutas existentes (sin pedido_id).
 // Reglas: el backend decide TODO (tipo solo_por_hoy / pedido_nuevo_no_recurrente, corte, cierre, roles, idempotencia).
 // Acá no se recalcula producción ni el habitual: se muestra lo que devuelve el backend y su código.
-// Finanzas: solo estado operativo del extra (generado / pendiente de generar / no corresponde). Nunca precios ni importes.
+// Finanzas: solo estado operativo del extra (generado / pendiente de generar / no corresponde). Nunca precios ni importes del extra guardado.
+// Excepcion: el formulario 'Cargar extra para hoy' muestra el precio ACTUAL del catalogo solo como referencia (el backend congela el precio real).
 import * as ops from '../../ops.js';
 import { el, montar, aviso, modal, confirmar, conBloqueo, toast } from '../../ui.js';
 import { avisoFalla, avisoSinConfirmar } from './personas.js';
@@ -28,6 +29,8 @@ const fmtMin = (f) => fmtFecha(f).toLowerCase();
 const fmtCorta = (f) => FECHA_RE.test(f || '') ? new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(f + 'T12:00:00Z')) : '—';
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? String(v).replace('.', ',') : '—');
 const cant = (q, u) => num(q) + (str(u) ? ' ' + u : '');
+const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const pesos = (v) => (typeof v === 'number' && Number.isFinite(v) ? money.format(v) : '—');
 
 const ORIGEN_TXT = { recurrente: 'Habitual', habitual: 'Habitual', solo_por_hoy: 'Solo por hoy', pedido_nuevo_no_recurrente: 'Pedido nuevo', sin_pedido: 'Sin pedido' };
 const ORIGEN_CHIP = { recurrente: 'gold', habitual: 'gold', solo_por_hoy: 'ok', pedido_nuevo_no_recurrente: 'ok', sin_pedido: '' };
@@ -62,6 +65,7 @@ const MSJ = {
   CAMPO_NO_PERMITIDO: 'La solicitud tenía datos que no se permiten.', REQUIERE_REVISION: 'Los datos guardados no son coherentes. Requiere revisión: no se aplicó ningún cambio.',
   PRODUCTO_DUPLICADO: 'Hay un producto repetido en el día. Juntalo en una sola línea.', CANTIDAD_INVALIDA: 'Cada producto necesita una cantidad mayor que 0.',
   LINEAS_INVALIDAS: 'Revisá los productos y cantidades del día.', RECURRENTE_MODIFICADO: 'El habitual cambió mientras se editaba. Actualizá y volvé a intentarlo.',
+  PRODUCTO_NO_DISPONIBLE: 'Hay productos que no están disponibles para esa persona (catálogo de su rol o producto inactivo).',
   SIN_RECURRENTE_PARA_FECHA: 'La persona no tiene habitual ese día: no corresponde “Hoy no pedir”.', SIN_EXCEPCION_VIGENTE: 'No hay un pedido vigente para esa fecha que se pueda anular.',
 };
 const OK_TXT = {
@@ -88,9 +92,11 @@ function avisoNegocio(r) {
 async function cargarApoyo(ctx) {
   const [p, c] = await Promise.all([ctx.pedir(TIPO, 'listar_personas', { buscar: '' }), ctx.pedir(TIPO, 'listar_productos', {})]);
   const personas = p.r && p.r.success && p.r.datos && Array.isArray(p.r.datos.personas) ? p.r.datos.personas.filter(x => x && PID.test(x.persona_id || '')) : null;
-  // De los productos solo se usan id, nombre, unidad y estado (los precios no se muestran en Pedidos).
+  // De los productos: id, nombre, unidad y estado. Precios y visibilidad por rol SOLO para la referencia de 'Cargar extra para hoy' (el backend congela el precio).
+  const nOk = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const productos = c.r && c.r.success && c.r.datos && Array.isArray(c.r.datos.productos)
-    ? c.r.datos.productos.filter(x => x && Number.isInteger(x.producto_id)).map(x => ({ producto_id: x.producto_id, producto: str(x.producto), unidad: str(x.unidad), activo: x.activo === true, categoria: str(x.categoria) })) : null;
+    ? c.r.datos.productos.filter(x => x && Number.isInteger(x.producto_id)).map(x => ({ producto_id: x.producto_id, producto: str(x.producto), unidad: str(x.unidad), activo: x.activo === true, categoria: str(x.categoria),
+      precio_minorista: nOk(x.precio_minorista), precio_mayorista: nOk(x.precio_mayorista), visible_clientes: x.visible_clientes === true, visible_repartidores: x.visible_repartidores === true })) : null;
   return { personas, productos, falla: p.falla || c.falla || null, r: (p.r && !p.r.success) ? p.r : ((c.r && !c.r.success) ? c.r : null) };
 }
 const rolesActivos = (p) => (p && Array.isArray(p.roles) ? p.roles.filter(r => r.estado === 'activo').map(r => r.rol) : []);
@@ -287,7 +293,16 @@ async function elegirPersona(ctx) {
 // =====================================================================================
 function vistaExtrasPendientes(ctx, zona) {
   const cuerpo = el('div', { class: 'stack', id: 'extras-pendientes', 'data-estado': 'cargando' });
-  montar(zona, el('p', { class: 'muted small', text: 'Extras por aprobar, con entrega pendiente o con el cargo pendiente de generar, de cualquier fecha. Los extras no entran en Producción.' }), cuerpo);
+  const avisosEx = el('div', { class: 'stack', id: 'extras-aviso' });
+  // 'Cargar extra para hoy' para cualquier persona (elige persona, rol y productos). Reutiliza solicitar_extra.
+  const bCrear = el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'btn-crear-extra' }, 'Cargar extra para hoy');
+  bCrear.addEventListener('click', conBloqueo(bCrear, async () => {
+    montar(avisosEx);
+    const apoyo = await cargarApoyo(ctx);
+    if (!apoyo.personas || !apoyo.productos) return montar(avisosEx, apoyo.falla ? avisoFalla(apoyo.falla, () => bCrear.click()) : avisoNegocio(apoyo.r || { success: false, codigo: 'ERROR_INTERNO' }));
+    abrirCrearExtra(ctx, apoyo, null, async (r) => { montar(avisosEx, avisoNegocio(r)); await cargar(); });
+  }, 'Abriendo…'));
+  montar(zona, el('div', { class: 'row' }, el('p', { class: 'muted small', text: 'Extras por aprobar, con entrega pendiente o con el cargo pendiente de generar, de cualquier fecha. Los extras no entran en Producción.' }), el('span', { class: 'spacer' }), bCrear), avisosEx, cuerpo);
   async function cargar() {
     cuerpo.dataset.estado = 'cargando';
     montar(cuerpo, el('div', { class: 'skeleton' }), el('div', { class: 'skeleton' }));
@@ -433,8 +448,83 @@ function abrirEntrega(ctx, x, alExito) {
 // =====================================================================================
 // EDITOR DE LÍNEAS (productos del catálogo; solo id, nombre y unidad)
 // =====================================================================================
+// ---------- 'Cargar extra para hoy' (Admin General) ----------
+// Reutiliza solicitar_extra (Extras PROD): con actor Admin el extra queda aprobado, entrega pendiente y sin cargo; siempre para HOY (Reglas).
+// Se envia SOLO persona_id, rol_pedido, fecha_entrega (hoy) y lineas {producto_id, cantidad, detalle_libre}. Nunca precio, lista, estado ni actor.
+// El precio que se muestra es la referencia ACTUAL del catalogo (misma regla que Reglas condicion_comercial); el que vale lo congela el backend.
+const listaDe = (persona, rol) => rol === 'repartidor' ? 'mayorista' : (persona && ['minorista', 'mayorista'].includes(persona.lista_precio) ? persona.lista_precio : null);
+const catalogoExtra = (productos, rol, lista) => (productos || []).filter(p => p.activo && (rol === 'repartidor' ? p.visible_repartidores : p.visible_clientes)
+  && typeof (lista === 'mayorista' ? p.precio_mayorista : p.precio_minorista) === 'number');
+function abrirCrearExtra(ctx, apoyo, ini, alExito) {
+  const conRol = (p) => rolesActivos(p).filter(r => r === 'cliente' || r === 'repartidor');
+  const candidatas = (apoyo.personas || []).filter(p => conRol(p).length).sort((a, b) => (str(a.nombre) || '').localeCompare(str(b.nombre) || '', 'es'));
+  let persona = ini && ini.persona ? ini.persona : null;
+  let rol = ini && ini.rol ? ini.rol : null;
+  let ed = null;
+  const sPer = persona ? null : el('select', { class: 'select', id: 'extra-persona' }, el('option', { value: '', text: 'Elegí la persona…' }),
+    candidatas.map(p => el('option', { value: p.persona_id, text: (str(p.nombre) || p.persona_id) })));
+  const sRol = el('select', { class: 'select', id: 'extra-rol' });
+  const campoRol = el('div', { class: 'field' }, el('label', { for: 'extra-rol', text: 'Rol del pedido' }), sRol);
+  const zonaEd = el('div', { class: 'stack', id: 'extra-editor' });
+  const resumen = el('div', { class: 'stack', id: 'extra-resumen', 'aria-live': 'polite' });
+  const zona = el('div', { class: 'stack', id: 'extra-aviso' });
+  const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-extra' }, 'Crear extra');
+  let cat = [], lista = null;
+  const pintarResumen = () => {
+    if (!ed) return montar(resumen);
+    const filas = ed.borrador().map(l => { const p = cat.find(x => x.producto_id === l.producto_id); const pu = p ? (lista === 'mayorista' ? p.precio_mayorista : p.precio_minorista) : null;
+      return { p, l, pu, imp: (pu !== null && l.cantidad > 0) ? Math.round(l.cantidad * pu * 100) / 100 : null }; });
+    if (!filas.length) return montar(resumen);
+    const total = filas.every(f => f.imp !== null) ? Math.round(filas.reduce((s2, f) => s2 + f.imp, 0) * 100) / 100 : null;
+    montar(resumen, el('div', { class: 'notice info small', 'data-precios': 'referencia' },
+      el('p', { class: 'small', text: 'Precio actual del catálogo (' + (lista === 'mayorista' ? 'mayorista' : 'minorista') + '), solo como referencia. Al crear el extra el precio queda congelado y no cambia aunque después cambie el catálogo.' }),
+      filas.map(f => el('div', { class: 'small', 'data-ref-producto': String(f.l.producto_id) },
+        (f.p ? (f.p.producto || 'Producto') : 'Producto') + ' — ' + (f.l.cantidad > 0 ? cant(f.l.cantidad, f.p && f.p.unidad) : 'sin cantidad') + ' × ' + pesos(f.pu) + (f.imp !== null ? ' = ' + pesos(f.imp) : ''))),
+      el('p', { class: 'small', 'data-total-estimado': total === null ? '' : String(total) }, el('strong', { text: 'Total estimado: ' }), total === null ? '—' : pesos(total))));
+  };
+  const armarEditor = () => {
+    ed = null; montar(zona);
+    if (!persona) { montar(zonaEd, el('p', { class: 'muted small', text: 'Elegí la persona para ver su catálogo.' })); return pintarResumen(); }
+    lista = listaDe(persona, rol);
+    if (!lista) { montar(zonaEd, aviso('error', 'La persona no tiene una lista de precios válida. Revisala en Clientes antes de cargar el extra.')); return pintarResumen(); }
+    cat = catalogoExtra(apoyo.productos, rol, lista);
+    if (!cat.length) { montar(zonaEd, aviso('error', 'No hay productos disponibles para el catálogo de ' + (rol === 'repartidor' ? 'repartidores' : 'clientes') + '.')); return pintarResumen(); }
+    const e2 = editorLineas(cat, [], { idBase: 'ext', alCambiar: () => pintarResumen() });
+    ed = e2; montar(zonaEd, e2.nodo); pintarResumen();
+  };
+  const armarRoles = () => {
+    const roles = persona ? conRol(persona) : [];
+    if (!roles.includes(rol)) rol = roles.includes('cliente') ? 'cliente' : (roles[0] || null);
+    montar(sRol, roles.map(r => el('option', { value: r, text: r === 'cliente' ? 'Como cliente' : 'Como repartidor' })));
+    if (rol) sRol.value = rol;
+    campoRol.hidden = roles.length < 2;
+    armarEditor();
+  };
+  if (sPer) sPer.addEventListener('change', () => { persona = candidatas.find(p => p.persona_id === sPer.value) || null; armarRoles(); });
+  sRol.addEventListener('change', () => { rol = sRol.value; armarEditor(); });
+  const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
+    el('p', { class: 'muted small', text: 'Extra de reposición para hoy (' + fmtMin(hoyART()) + '). Cargado por Golden queda aprobado, con la entrega pendiente y sin cargo hasta registrar la entrega. No entra en Producción.' }),
+    sPer ? el('div', { class: 'field' }, el('label', { for: 'extra-persona', text: 'Persona' }), sPer) : null,
+    campoRol, zonaEd, resumen, b, zona);
+  const m = modal('Cargar extra para hoy' + (persona ? ' — ' + (str(persona.nombre) || persona.persona_id) : ''), form);
+  armarRoles();
+  form.addEventListener('submit', conBloqueo(b, async () => {
+    montar(zona);
+    if (!persona) return montar(zona, aviso('error', 'Elegí la persona.'));
+    if (!ed) return montar(zona, aviso('error', 'No se puede cargar el extra para esta persona.'));
+    const l = ed.leer();
+    if (l.error) return montar(zona, aviso('error', l.error));
+    const prods = l.lineas.map(x => x.producto_id);
+    if (new Set(prods).size !== prods.length) return montar(zona, aviso('error', 'Hay un producto repetido: juntalo en una sola línea.'));
+    const lineas = l.lineas.map(x => { const o = { producto_id: x.producto_id, cantidad: x.cantidad }; if (x.detalle_libre) o.detalle_libre = x.detalle_libre; return o; });
+    await escribir(ctx, zona, 'solicitar_extra', { persona_id: persona.persona_id, rol_pedido: rol, fecha_entrega: hoyART(), lineas }, async (r) => {
+      m.cerrar(); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(r, persona);
+    });
+  }, 'Creando…'));
+}
+
 function editorLineas(productos, iniciales, cfg) {
-  const { conDia, conSalida, reps, idBase } = cfg;
+  const { conDia, conSalida, reps, idBase, alCambiar } = cfg;
   const activos = productos.filter(p => p.activo).sort((a, b) => (a.producto || '').localeCompare(b.producto || '', 'es'));
   const cont = el('div', { class: 'stack lin-editor', id: idBase + '-lineas' });
   const filas = [];
@@ -452,9 +542,10 @@ function editorLineas(productos, iniciales, cfg) {
     const quitar = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'quitar-linea' }, 'Quitar');
     const nodo = el('div', { class: 'lin-fila' + (conDia ? ' con-dia' : '') + (conSalida ? ' con-salida' : ''), 'data-fila': String(k) }, sDia, sProd, iCant, iDet, sSal, sRep, quitar);
     const f = { k, nodo, sProd, iCant, iDet, sDia, sSal, sRep };
-    quitar.addEventListener('click', () => { if (filas.length <= 1) return; filas.splice(filas.indexOf(f), 1); nodo.remove(); });
+    quitar.addEventListener('click', () => { if (filas.length <= 1) return; filas.splice(filas.indexOf(f), 1); nodo.remove(); if (alCambiar) alCambiar(); });
     filas.push(f);
     cont.insertBefore(nodo, bAgregar);
+    if (alCambiar) alCambiar();
   };
   const bAgregar = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: idBase + '-agregar', 'data-accion': 'agregar-linea', onclick: () => agregar(null) }, 'Agregar producto');
   cont.appendChild(bAgregar);
@@ -477,7 +568,10 @@ function editorLineas(productos, iniciales, cfg) {
     }
     return { lineas: out };
   };
-  return { nodo: cont, leer };
+  // Borrador para mostrar referencias (no valida ni bloquea): lineas con producto elegido y su cantidad tal como esta.
+  const borrador = () => filas.map(f => ({ producto_id: Number(f.sProd.value), cantidad: leerNum(f.iCant.value) })).filter(l => Number.isInteger(l.producto_id) && l.producto_id > 0);
+  if (alCambiar) { cont.addEventListener('input', alCambiar); cont.addEventListener('change', alCambiar); }
+  return { nodo: cont, leer, borrador };
 }
 
 // =====================================================================================
@@ -711,7 +805,9 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     if (!z.isConnected) return;
     z.dataset.estado = 'listo';
     const esHoy = fecha === hoyART();
-    const bNuevo = esHoy && persona ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-cargar-extra', onclick: () => abrirExtra(() => cargarExtras(z)) }, 'Cargar extra para hoy') : null;
+    // Siempre crea el extra para HOY: si la ficha muestra otra fecha, al terminar se abre la ficha de hoy.
+    const bNuevo = persona && rolesActivos(persona).some(r => r === 'cliente' || r === 'repartidor') ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-cargar-extra',
+      onclick: () => abrirCrearExtra(ctx, apoyo, { persona, rol }, async (r) => { montar(avisos, avisoNegocio(r)); if (esHoy) await cargarExtras(z); else ctx.ir('#/admin/pedidos/persona/' + encodeURIComponent(pid) + '/' + hoyART()); }) }, 'Cargar extra para hoy') : null;
     const head = el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-extra', text: 'Extras del día' }), el('span', { class: 'spacer' }), bNuevo);
     if (res.falla) return montar(z, head, avisoFalla(res.falla, () => cargarExtras(z)));
     if (ctx.revisarFinSesion(res.r)) return;
@@ -719,27 +815,6 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     const mios = res.r.datos.extras.filter(x => x.persona_id === pid);
     montar(z, head, mios.length ? mios.map(x => tarjetaExtra(ctx, x, { alCambiar: () => cargarExtras(z) })) : el('p', { class: 'muted', text: 'Sin extras para esta fecha.' }),
       esHoy ? null : el('p', { class: 'muted small', text: 'Los extras se cargan solo para el día de hoy y no entran en Producción.' }));
-  }
-  function abrirExtra(alExito) {
-    const roles = rolesActivos(persona).filter(r => r === 'cliente' || r === 'repartidor');
-    const sRol = el('select', { class: 'select', id: 'extra-rol' }, roles.map(r => el('option', { value: r, text: r === 'cliente' ? 'Como cliente' : 'Como repartidor' })));
-    sRol.value = roles.includes(rol) ? rol : roles[0];
-    const ed = editorLineas(apoyo.productos, [], { idBase: 'ext' });
-    const zona = el('div', { class: 'stack', id: 'extra-aviso' });
-    const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-extra' }, 'Cargar extra');
-    const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-      el('p', { class: 'muted small', text: 'Extra de reposición para hoy (' + fmtMin(hoyART()) + '). Cargado por Golden queda aprobado. No entra en Producción.' }),
-      roles.length > 1 ? el('div', { class: 'field' }, el('label', { for: 'extra-rol', text: 'Rol del pedido' }), sRol) : null,
-      ed.nodo, b, zona);
-    const m = modal('Cargar extra — ' + (persona.nombre || pid), form);
-    form.addEventListener('submit', conBloqueo(b, async () => {
-      montar(zona);
-      const l = ed.leer();
-      if (l.error) return montar(zona, aviso('error', l.error));
-      await escribir(ctx, zona, 'solicitar_extra', { persona_id: pid, rol_pedido: sRol.value, fecha_entrega: hoyART(), lineas: l.lineas }, async (r) => {
-        m.cerrar(); montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito();
-      });
-    }, 'Cargando…'));
   }
 
   cargar();
