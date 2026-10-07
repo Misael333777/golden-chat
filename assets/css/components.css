@@ -813,3 +813,80 @@ body:has(.admin-page) .badge-test { display: none; }
 .img-vacia { font-size: 0.8rem; color: var(--ink-faint); text-align: center; }
 .img-aviso:empty { display: none; }
 .img-selector label.btn { cursor: pointer; }
+
+/* =====================================================================
+   Cliente / Repartidor — "Hacer pedido": catálogo en tarjetas + carrito "Tu pedido" (armador.js). Misma paleta y tipografías Golden.
+   ===================================================================== */
+.arm-marco { gap: 16px; }
+.arm-intro { display: flex; flex-direction: column; gap: 2px; padding: 18px 22px; border-radius: 18px; border: 1px solid var(--line-soft);
+  background: linear-gradient(135deg, #FFFCF5 0%, #FBF0D9 100%); position: relative; overflow: hidden; }
+.arm-intro::after { content: ''; position: absolute; right: -10px; top: -6px; width: 150px; height: 120px; background: var(--brown); opacity: .14; pointer-events: none;
+  -webkit-mask: url(../img/deco/trigo-ramo.svg) right top / contain no-repeat; mask: url(../img/deco/trigo-ramo.svg) right top / contain no-repeat; }
+.arm-intro > * { position: relative; }
+.arm-titulo { font-size: clamp(1.45rem, 3vw, 1.9rem); }
+.arm { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
+.arm-catalogo { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.arm-buscador .input { min-height: 50px; }
+.arm-cats { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: thin; }
+.arm-cat { flex-shrink: 0; min-height: 38px; padding: 0 16px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--white);
+  color: var(--ink); font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s; }
+.arm-cat:hover { border-color: var(--gold); background: var(--cream-soft); }
+.arm-cat.activa { background: linear-gradient(180deg, var(--gold-btn), var(--gold-btn-2)); border-color: transparent; box-shadow: 0 6px 14px -10px rgba(168, 120, 48, .9); }
+.arm-cat:focus-visible, .arm-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.arm-grilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.arm-card { display: flex; flex-direction: column; gap: 10px; padding: 10px 10px 12px; border-radius: 18px; border: 1px solid var(--line-soft);
+  background: var(--white); box-shadow: var(--shadow-xs); min-width: 0; transition: border-color .15s, box-shadow .15s; }
+.arm-card:hover { box-shadow: var(--shadow-sm); }
+.arm-card.en-pedido { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold-light), var(--shadow-sm); }
+.arm-foto { position: relative; aspect-ratio: 4 / 3; border-radius: 13px; overflow: hidden; display: grid; place-items: center;
+  background: radial-gradient(120% 90% at 30% 20%, #FFF8EA 0%, #F6E6C2 60%, #EED9A9 100%); border: 1px solid var(--line-soft); }
+.arm-foto::before { content: ''; position: absolute; inset: 12% 8% 6% 46%; background: var(--brown); opacity: .16;
+  -webkit-mask: url(../img/deco/trigo-ramo.svg) right bottom / contain no-repeat; mask: url(../img/deco/trigo-ramo.svg) right bottom / contain no-repeat; }
+.arm-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.arm-foto-ini { position: relative; font-family: var(--font-title); font-weight: 600; font-size: clamp(1.4rem, 3.4vw, 1.9rem); color: var(--gold-deep); letter-spacing: .02em; }
+.arm-foto-chica { width: 52px; height: 52px; aspect-ratio: auto; border-radius: 11px; flex-shrink: 0; }
+.arm-foto-chica .arm-foto-ini { font-size: 1rem; }
+.arm-card-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 0 2px; }
+.arm-nombre { font-family: var(--font-text); font-size: 0.95rem; font-weight: 700; line-height: 1.25; letter-spacing: 0; overflow-wrap: anywhere; }
+.arm-precio { font-size: 0.95rem; }
+.arm-precio strong { font-family: var(--font-title); font-size: 1.12rem; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.arm-unidad { color: var(--ink-soft); font-size: 0.82rem; }
+.arm-selector { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; gap: 4px; margin-top: auto;
+  border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 3px; background: #FFFCF6; }
+.arm-btn { width: 40px; height: 36px; border-radius: var(--radius-pill); border: none; background: var(--white); color: var(--ink); cursor: pointer;
+  font: inherit; font-size: 1.2rem; font-weight: 700; line-height: 1; box-shadow: var(--shadow-xs); transition: background .15s; }
+.arm-btn:hover { background: #F7E6C3; }
+.arm-btn[data-accion="mas"] { background: linear-gradient(180deg, var(--gold-btn), var(--gold-btn-2)); }
+.arm-cant { width: 100%; min-width: 0; height: 36px; border: none; background: transparent; text-align: center; font: inherit; font-weight: 700;
+  font-size: 0.98rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.arm-cant:focus { outline: none; box-shadow: var(--ring); border-radius: 10px; }
+.arm-vacio { grid-column: 1 / -1; padding: 22px 14px; text-align: center; color: var(--ink-soft); font-size: 0.92rem; border: 1px dashed var(--line); border-radius: 14px; background: #FFFCF6; }
+.arm-carrito { display: flex; flex-direction: column; gap: 12px; padding: 18px; }
+.arm-carrito-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.arm-carrito-head h3 { font-size: 1.3rem; }
+.arm-badge { min-width: 26px; height: 26px; padding: 0 8px; border-radius: var(--radius-pill); display: inline-grid; place-items: center;
+  background: var(--ink); color: var(--white); font-size: 0.8rem; font-weight: 700; }
+.arm-aviso-dia { padding: 10px 12px; border-radius: 12px; background: #FBEBCB; color: #6B4E1C; border-left: 3px solid var(--gold); }
+.arm-items { display: flex; flex-direction: column; gap: 10px; }
+.arm-item { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px 10px; align-items: center; padding: 10px; border-radius: 14px;
+  border: 1px solid var(--line-soft); background: #FFFCF6; }
+.arm-item-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.arm-item-nombre { font-weight: 700; font-size: 0.92rem; overflow-wrap: anywhere; }
+.arm-item-sub { font-weight: 700; font-size: 0.92rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.arm-item .arm-selector { grid-column: 1 / -1; }
+.arm-item .arm-det { grid-column: 1 / -1; min-height: 40px; font-size: 0.88rem; border-radius: 10px; }
+.arm-total { display: flex; flex-direction: column; gap: 2px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.arm-total-label { color: var(--ink-soft); font-size: 0.86rem; font-weight: 600; }
+.arm-total-valor { font-family: var(--font-title); font-size: 1.9rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.arm-enviar { width: 100%; min-height: 52px; font-size: 1rem; }
+.arm-carrito > #arm-cancelar { align-self: center; }
+.arm-barra-movil { position: sticky; bottom: 12px; z-index: 5; width: 100%; min-height: 50px; border: none; border-radius: var(--radius-pill); cursor: pointer;
+  background: var(--ink); color: var(--white); font: inherit; font-weight: 700; font-size: 0.95rem; box-shadow: var(--shadow-lift); }
+@media (min-width: 560px) { .arm-grilla { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1100px) {
+  .arm { grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; }
+  .arm-carrito { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow-y: auto; }
+  .arm-barra-movil { display: none; }
+}
+@media (min-width: 900px) and (max-width: 1099px) { .arm-barra-movil { display: none; } }
+@media (prefers-reduced-motion: reduce) { .arm-card, .arm-cat, .arm-btn { transition: none; } }
