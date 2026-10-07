@@ -1,7 +1,7 @@
 // Panel Cliente → Extras de hoy. Lectura: extra/mis_extras (hoy lo decide el servidor). Escritura: extra/solicitar_extra (Extras PROD).
 // El extra queda PENDIENTE de Golden (Admin General): el cliente no aprueba, no registra entregas ni toca Finanzas.
 // El precio queda congelado al solicitar (lo fija el backend). Cada solicitud es independiente; un reintento no duplica (mismo operacion_id).
-import { el, montar, aviso, conBloqueo, toast } from '../../ui.js';
+import { el, montar, aviso, conBloqueo, toast, modal } from '../../ui.js';
 import { leer, catalogo, escribir, cabecera, vacio, chipExtra, pesos, hoyART, fmtFecha, cant, num, str, leerNum, textoOk } from './comun.js';
 
 const MODO_TXT = { entrega: 'Te lo llevamos', retiro: 'Lo retirás' };
@@ -28,8 +28,53 @@ export function vistaExtras(ctx, cont) {
             el('span', null, el('span', { class: 'pc-label', text: 'Entregado: ' }), ln.cantidad_entregada === null || ln.cantidad_entregada === undefined ? '—' : num(ln.cantidad_entregada))))),
         x.motivo_rechazo ? el('p', { class: 'small', 'data-motivo': 'true' }, el('strong', { text: 'Motivo: ' }), x.motivo_rechazo) : null,
         typeof x.importe_final === 'number' ? el('p', { class: 'small' }, el('strong', { text: 'Importe: ' }), pesos(x.importe_final))
-          : typeof x.importe_aprobado === 'number' ? el('p', { class: 'small' }, el('strong', { text: 'Importe aprobado: ' }), pesos(x.importe_aprobado)) : null))));
+          : typeof x.importe_aprobado === 'number' ? el('p', { class: 'small' }, el('strong', { text: 'Importe aprobado: ' }), pesos(x.importe_aprobado)) : null,
+        x.estado === 'anulado' && x.motivo_anulacion ? el('p', { class: 'small', 'data-motivo-anulacion': 'true' }, el('strong', { text: 'Motivo de la cancelación: ' }), x.motivo_anulacion) : null,
+        x.estado === 'solicitado' ? accionesExtra(x, i) : null))));
   });
+  // Mientras Golden no lo resolvió (pendiente): cambiar cantidades o cancelar. El precio queda el del momento en que lo pediste.
+  function accionesExtra(x, i) {
+    const zona = el('div', { class: 'stack', 'data-extra-aviso': String(i + 1) });
+    const bMod = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'modificar-extra' }, 'Modificar');
+    const bCan = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'cancelar-extra' }, 'Cancelar');
+    bMod.addEventListener('click', () => { montar(zona); abrirModificar(x); });
+    bCan.addEventListener('click', () => { montar(zona); abrirCancelar(x); });
+    return el('div', { class: 'stack' }, el('div', { class: 'row ext-acciones' }, bMod, bCan), zona);
+  }
+  function abrirModificar(x) {
+    const filasM = (x.lineas || []).map((ln, k) => {
+      const inp = el('input', { class: 'input input-num', id: 'ex-mod-' + k, type: 'number', min: '0', step: 'any', inputmode: 'decimal', value: String(ln.cantidad_solicitada) });
+      return { ln, inp, nodo: el('div', { class: 'field' }, el('label', { for: 'ex-mod-' + k, text: (str(ln.producto) || 'Producto') + (ln.unidad ? ' (' + ln.unidad + ')' : '') }), inp) };
+    });
+    const zonaM = el('div', { class: 'stack', id: 'ex-mod-aviso' });
+    const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'ex-mod-guardar' }, 'Guardar cambios');
+    const form = el('form', { class: 'stack', novalidate: true },
+      el('p', { class: 'muted small', text: 'Podés cambiar la cantidad de cada producto mientras Golden no lo haya revisado. El precio queda el del momento en que lo pediste.' }),
+      filasM.map(f => f.nodo), b, zonaM);
+    const m = modal('Modificar extra', form);
+    form.addEventListener('submit', conBloqueo(b, async () => {
+      montar(zonaM);
+      const lineas = filasM.map(f => ({ producto_id: f.ln.producto_id, cantidad: leerNum(f.inp.value) }));
+      if (lineas.some(l => !(l.cantidad > 0))) return montar(zonaM, aviso('error', 'Cada producto necesita una cantidad mayor que 0. Si ya no lo necesitás, cancelá el extra.', 'DATOS_INCOMPLETOS'));
+      if (lineas.every((l, k) => l.cantidad === filasM[k].ln.cantidad_solicitada)) return montar(zonaM, aviso('info', 'No cambiaste ninguna cantidad.'));
+      await escribir(ctx, zonaM, 'modificar_extra', { pedido_id: x.pedido_id, lineas }, async (r) => { m.cerrar(); montar(avisos, el('div', { class: 'notice ok', role: 'status', 'data-codigo': r.codigo }, textoOk(r))); toast(textoOk(r)); await cargar(); });
+    }, 'Guardando…'));
+  }
+  function abrirCancelar(x) {
+    const t = el('textarea', { class: 'input', id: 'ex-can-motivo', maxlength: '300', rows: '2', placeholder: 'Opcional' });
+    const zonaC = el('div', { class: 'stack', id: 'ex-can-aviso' });
+    const b = el('button', { type: 'submit', class: 'btn btn-danger', id: 'ex-can-confirmar' }, 'Cancelar el extra');
+    const form = el('form', { class: 'stack', novalidate: true },
+      el('p', { class: 'small', text: 'El extra queda cancelado y Golden ya no lo va a preparar. No se cobra nada.' }),
+      el('div', { class: 'field' }, el('label', { for: 'ex-can-motivo', text: 'Motivo (opcional)' }), t), b, zonaC);
+    const m = modal('Cancelar extra', form);
+    form.addEventListener('submit', conBloqueo(b, async () => {
+      montar(zonaC);
+      const campos = { pedido_id: x.pedido_id };
+      if (t.value.trim()) campos.motivo_anulacion = t.value.trim();
+      await escribir(ctx, zonaC, 'cancelar_extra', campos, async (r) => { m.cerrar(); montar(avisos, el('div', { class: 'notice ok', role: 'status', 'data-codigo': r.codigo }, textoOk(r))); toast(textoOk(r)); await cargar(); });
+    }, 'Cancelando…'));
+  }
   bNuevo.addEventListener('click', () => abrirForm());
 
   async function abrirForm() {

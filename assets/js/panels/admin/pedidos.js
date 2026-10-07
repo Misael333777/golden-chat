@@ -33,8 +33,8 @@ const ORIGEN_TXT = { recurrente: 'Habitual', habitual: 'Habitual', solo_por_hoy:
 const ORIGEN_CHIP = { recurrente: 'gold', habitual: 'gold', solo_por_hoy: 'ok', pedido_nuevo_no_recurrente: 'ok', sin_pedido: '' };
 const chipOrigen = (o) => el('span', { class: 'chip ' + (ORIGEN_CHIP[o] || ''), 'data-origen': o || 'ninguno', text: ORIGEN_TXT[o] || String(o || '—') });
 const EXTRA_TXT = { solicitado: 'Pendiente de aprobar', rechazado: 'Rechazado', aprobado_entrega_pendiente: 'Aprobado · entrega pendiente', entregado: 'Entregado',
-  entregado_parcial: 'Entregado parcial', no_entregado: 'No entregado', requiere_revision: 'Requiere revisión' };
-const EXTRA_CHIP = { solicitado: 'warn', rechazado: 'off', aprobado_entrega_pendiente: 'gold', entregado: 'ok', entregado_parcial: 'ok', no_entregado: 'off', requiere_revision: 'off' };
+  entregado_parcial: 'Entregado parcial', no_entregado: 'No entregado', requiere_revision: 'Requiere revisión', anulado: 'Cancelado' };
+const EXTRA_CHIP = { solicitado: 'warn', rechazado: 'off', aprobado_entrega_pendiente: 'gold', entregado: 'ok', entregado_parcial: 'ok', no_entregado: 'off', requiere_revision: 'off', anulado: 'off' };
 const chipExtra = (e) => el('span', { class: 'chip ' + (EXTRA_CHIP[e] || ''), 'data-estado-extra': e || 'ninguno', text: EXTRA_TXT[e] || String(e || '—') });
 const FIN_TXT = { generado: 'Cargo generado', pendiente_de_generar: 'Cargo pendiente de generar', no_corresponde: 'Sin cargo' };
 const chipFin = (f) => el('span', { class: 'chip ' + (f === 'pendiente_de_generar' ? 'warn' : (f === 'generado' ? 'ok' : '')), 'data-finanzas': f || 'ninguno', text: 'Finanzas: ' + (FIN_TXT[f] || '—') });
@@ -67,7 +67,7 @@ const MSJ = {
 const OK_TXT = {
   PEDIDO_REGISTRADO: 'Pedido registrado.', VERSION_SUPERADA: 'Pedido registrado (ya había una versión más nueva).',
   RECURRENTE_CONFIGURADO: 'Habitual configurado.', DIA_AGREGADO: 'Día agregado al habitual.', CAMBIO_VIGENTE_APLICADO: 'Habitual actualizado.',
-  EXTRA_REGISTRADO_APROBADO: 'Extra cargado y aprobado.', EXTRA_SOLICITADO: 'Extra solicitado.', EXTRA_APROBADO: 'Extra aprobado.', EXTRA_RECHAZADO: 'Extra rechazado.',
+  EXTRA_REGISTRADO_APROBADO: 'Extra cargado y aprobado.', EXTRA_SOLICITADO: 'Extra solicitado.', EXTRA_APROBADO: 'Extra aprobado.', EXTRA_RECHAZADO: 'Extra rechazado.', EXTRA_CANCELADO: 'Extra cancelado.',
   ENTREGA_REGISTRADA: 'Entrega registrada.', ENTREGA_REGISTRADA_CON_CARGO: 'Entrega registrada. Se generó el cargo del extra.',
   FINANZAS_RECUPERADAS: 'Se generó el cargo pendiente del extra.', OPERACION_YA_PROCESADA: 'La operación ya estaba registrada. No se duplicó.',
   HABITUAL_DIA_EDITADO: 'Día del habitual actualizado.', HOY_NO_PEDIR_REGISTRADO: 'Listo: ese día la persona no recibe pedido. El habitual no cambia.', PEDIDO_ANULADO: 'Se anuló el pedido de esa fecha.',
@@ -323,6 +323,9 @@ function tarjetaExtra(ctx, x, opciones) {
     boton('rechazar-extra', 'Rechazar', 'btn-danger', () => abrirRechazar(ctx, x, tras));
   }
   if (x.estado === 'aprobado_entrega_pendiente') boton('registrar-entrega', 'Registrar entrega', 'btn-primary', () => abrirEntrega(ctx, x, tras));
+  // Cancelar: pendiente, o aprobado SIN entrega y SIN cargo (con entrega o cargo no hay cancelacion simple; el backend lo vuelve a verificar).
+  if (x.estado === 'solicitado' || (x.estado === 'aprobado_entrega_pendiente' && x.finanzas === 'no_corresponde'))
+    boton('cancelar-extra', x.estado === 'solicitado' ? 'Cancelar' : 'Cancelar extra', 'btn-ghost', () => abrirCancelarExtra(ctx, x, tras));
   if (x.estado !== 'requiere_revision' && x.finanzas === 'pendiente_de_generar') {
     const b = el('button', { type: 'button', class: 'btn btn-gold btn-sm', 'data-accion': 'recuperar-finanzas' }, 'Generar cargo pendiente');
     b.addEventListener('click', conBloqueo(b, async () => {
@@ -350,6 +353,7 @@ function tarjetaExtra(ctx, x, opciones) {
     x.estado === 'requiere_revision' ? el('div', { class: 'notice info small', 'data-revision': (x.revision_motivos || []).join(',') },
       'Los datos de este extra no cierran con el circuito y no se pueden operar desde acá. Motivo: ' + ((x.revision_motivos || []).join(', ') || 'sin detalle') + '.') : null,
     x.motivo_rechazo ? el('p', { class: 'small', text: 'Motivo del rechazo: ' + x.motivo_rechazo }) : null,
+    x.estado === 'anulado' ? el('p', { class: 'small', 'data-motivo-anulacion': 'true', text: (x.anulado_por_golden === false ? 'Cancelado por la persona' : 'Cancelado por Golden') + (x.motivo_anulacion ? ' · Motivo: ' + x.motivo_anulacion : '') }) : null,
     lineas,
     acciones.length ? el('div', { class: 'row ext-acciones' }, acciones) : null,
     zona);
@@ -388,6 +392,22 @@ function abrirRechazar(ctx, x, alExito) {
     if (!motivo) return montar(zona, aviso('error', 'Escribí el motivo del rechazo.'));
     await escribir(ctx, zona, 'rechazar_extra', { pedido_id: x.pedido_id, motivo_rechazo: motivo }, async (r) => { m.cerrar(); await alExito(r); });
   }, 'Rechazando…'));
+}
+
+function abrirCancelarExtra(ctx, x, alExito) {
+  const t = el('textarea', { class: 'input', id: 'cancelar-extra-motivo', maxlength: '300', rows: '3', placeholder: 'Ej.: lo pidió por error / no hay stock' });
+  const zona = el('div', { class: 'stack', id: 'cancelar-extra-aviso' });
+  const b = el('button', { type: 'submit', class: 'btn btn-danger', id: 'btn-cancelar-extra' }, 'Cancelar extra');
+  const form = el('form', { class: 'stack', novalidate: true },
+    el('p', { class: 'muted small', text: 'El extra queda cancelado: no se entrega ni se cobra. Se conservan las cantidades y el precio como historial.' }),
+    el('div', { class: 'field' }, el('label', { for: 'cancelar-extra-motivo', text: 'Motivo de la cancelación (lo ve la persona)' }), t), b, zona);
+  const m = modal('Cancelar extra — ' + (x.nombre || ''), form);
+  form.addEventListener('submit', conBloqueo(b, async () => {
+    montar(zona);
+    const motivo = t.value.trim();
+    if (!motivo) return montar(zona, aviso('error', 'Escribí el motivo de la cancelación.'));
+    await escribir(ctx, zona, 'cancelar_extra', { pedido_id: x.pedido_id, motivo_anulacion: motivo }, async (r) => { m.cerrar(); await alExito(r); });
+  }, 'Cancelando…'));
 }
 
 function abrirEntrega(ctx, x, alExito) {

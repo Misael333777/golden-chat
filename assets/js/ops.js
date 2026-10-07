@@ -19,7 +19,7 @@ export const ACCIONES_FINANZAS = ['registrar_cobro', 'registrar_ajuste', 'revert
   'registrar_empleado', 'registrar_sueldo', 'registrar_obligacion_sueldo', 'baja_empleado', 'restaurar_empleado'];
 const ACCIONES = ['crear_persona', 'editar_persona', 'agregar_rol', 'quitar_rol', 'reactivar_rol', 'habilitar_acceso', 'deshabilitar_acceso',
   'crear_producto', 'editar_producto', 'cambiar_precios', 'activar_producto', 'desactivar_producto',
-  'crear_pedido_normal', 'configurar_recurrente', 'agregar_dia', 'cambio_vigente', 'solicitar_extra', 'aprobar_extra', 'rechazar_extra', 'registrar_entrega', 'recuperar_finanzas_extra',
+  'crear_pedido_normal', 'configurar_recurrente', 'agregar_dia', 'cambio_vigente', 'solicitar_extra', 'aprobar_extra', 'rechazar_extra', 'registrar_entrega', 'recuperar_finanzas_extra', 'modificar_extra', 'cancelar_extra',
   'agregar_linea_manual', 'editar_linea_manual', 'anular_linea_manual', 'crear_aclaracion', 'editar_aclaracion', 'activar_aclaracion', 'desactivar_aclaracion', 'actualizar_configuracion',
   'derivar_revision', 'atender_revision', 'soporte_tomar', 'soporte_resolver', 'solicitar_soporte', 'registro_aprobar', 'registro_rechazar',
   // Etapa 4: habitual multiproducto por día, 'Hoy no pedir' y 'Volver al habitual' / 'Cancelar pedido' (cliente: anular; Admin General: anular_pedido_fecha).

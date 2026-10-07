@@ -57,7 +57,7 @@ function vistaPanel(ctx, partes, panel) {
 }
 
 // Operaciones del panel Cliente que quedaron sin confirmar (red caída): se reintentan con el MISMO operacion_id.
-const ACC_TXT = { crear_pedido_normal: 'Pedido para una fecha', cambio_vigente: 'Cambio del habitual', solicitar_extra: 'Pedido de extra', solicitar_soporte: 'Consulta a Golden',
+const ACC_TXT = { crear_pedido_normal: 'Pedido para una fecha', cambio_vigente: 'Cambio del habitual', solicitar_extra: 'Pedido de extra', modificar_extra: 'Cambio de un extra', cancelar_extra: 'Cancelación de un extra', solicitar_soporte: 'Consulta a Golden',
   editar_habitual_dia: 'Cambio del habitual', hoy_no_pedir: 'Hoy no pedir', anular: 'Volver al habitual / cancelar pedido' };
 function describir(p) {
   const c = p.campos || {};
