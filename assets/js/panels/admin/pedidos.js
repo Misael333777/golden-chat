@@ -12,6 +12,8 @@
 import * as ops from '../../ops.js';
 import { el, montar, aviso, modal, confirmar, conBloqueo, toast } from '../../ui.js';
 import { avisoFalla, avisoSinConfirmar } from './personas.js';
+import { armadorPedido } from '../cliente/armador.js';
+import { DRIVE_RE } from './imagenes.js';
 
 const TIPO = 'admin_general';
 const estado = { fecha: null, tab: 'fecha', texto: '', tipo: 'todos', repartidor: 'todos', salida: 'todas', extra: 'todos' };
@@ -92,16 +94,39 @@ function avisoNegocio(r) {
 async function cargarApoyo(ctx) {
   const [p, c] = await Promise.all([ctx.pedir(TIPO, 'listar_personas', { buscar: '' }), ctx.pedir(TIPO, 'listar_productos', {})]);
   const personas = p.r && p.r.success && p.r.datos && Array.isArray(p.r.datos.personas) ? p.r.datos.personas.filter(x => x && PID.test(x.persona_id || '')) : null;
-  // De los productos: id, nombre, unidad y estado. Precios y visibilidad por rol SOLO para la referencia de 'Cargar extra para hoy' (el backend congela el precio).
+  // De los productos: id, nombre, unidad, estado e imagen (fotos del catálogo + carrito). Precios y visibilidad por rol SOLO para la referencia de 'Cargar extra para hoy' (el backend congela el precio).
   const nOk = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const productos = c.r && c.r.success && c.r.datos && Array.isArray(c.r.datos.productos)
     ? c.r.datos.productos.filter(x => x && Number.isInteger(x.producto_id)).map(x => ({ producto_id: x.producto_id, producto: str(x.producto), unidad: str(x.unidad), activo: x.activo === true, categoria: str(x.categoria),
-      precio_minorista: nOk(x.precio_minorista), precio_mayorista: nOk(x.precio_mayorista), visible_clientes: x.visible_clientes === true, visible_repartidores: x.visible_repartidores === true })) : null;
+      precio_minorista: nOk(x.precio_minorista), precio_mayorista: nOk(x.precio_mayorista), visible_clientes: x.visible_clientes === true, visible_repartidores: x.visible_repartidores === true,
+      imagen_url: str(x.imagen_url) })) : null;
   return { personas, productos, falla: p.falla || c.falla || null, r: (p.r && !p.r.success) ? p.r : ((c.r && !c.r.success) ? c.r : null) };
 }
 const rolesActivos = (p) => (p && Array.isArray(p.roles) ? p.roles.filter(r => r.estado === 'activo').map(r => r.rol) : []);
 const nombreDe = (apoyo, pid) => { const p = apoyo && apoyo.personas ? apoyo.personas.find(x => x.persona_id === pid) : null; return p ? (str(p.nombre) || pid) : (pid || '—'); };
 const repartidores = (apoyo) => (apoyo && apoyo.personas ? apoyo.personas.filter(p => rolesActivos(p).includes('repartidor')) : []);
+
+// ---------- catálogo + carrito (mismo componente que "Hacer pedido" de Cliente/Repartidor) ----------
+// Admin: sin precios (Pedidos nunca muestra importes). Productos activos + los ya cargados que hoy están inactivos (se conservan, como antes).
+const productosArmador = (apoyo) => (apoyo.productos || []).filter(p => p.activo)
+  .map(p => ({ producto_id: p.producto_id, nombre: p.producto || 'Producto ' + p.producto_id, categoria: p.categoria, unidad: p.unidad, precio: null,
+    tiene_imagen: typeof p.imagen_url === 'string' && DRIVE_RE.test(p.imagen_url) }));
+// Fotos en Admin: la acción existente admin_general/ver_imagen (la misma del Catálogo de Admin). Caché en memoria; si falla, queda el ícono.
+const fotosAdmin = new Map(); // imagen_url -> Promise<data:|null>
+function cargadorFotosAdmin(ctx, apoyo) {
+  return (producto_id) => {
+    const p = (apoyo.productos || []).find(x => x.producto_id === producto_id);
+    const url = p && typeof p.imagen_url === 'string' && DRIVE_RE.test(p.imagen_url) ? p.imagen_url : null;
+    if (!url) return Promise.resolve(null);
+    if (!fotosAdmin.has(url)) fotosAdmin.set(url, ctx.pedir(TIPO, 'ver_imagen', { imagen_url: url }).then((res) => {
+      if (!res || res.falla) { fotosAdmin.delete(url); return null; }
+      const d = res.r && res.r.success ? res.r.datos || {} : null;
+      if (!d || !['image/png', 'image/jpeg', 'image/webp'].includes(d.tipo_mime) || typeof d.contenido_base64 !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(d.contenido_base64)) return null;
+      return 'data:' + d.tipo_mime + ';base64,' + d.contenido_base64;
+    }, () => { fotosAdmin.delete(url); return null; }));
+    return fotosAdmin.get(url);
+  };
+}
 
 // ---------- escritura común ----------
 // Ejecuta una escritura con operacion_id (idempotente; reintento con el MISMO id si quedó sin confirmar). Devuelve la respuesta o null.
@@ -649,7 +674,7 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     z.dataset.modificable = String(d.modificable === true);
     const motivo = d.modificable ? null : (MSJ[d.motivo_no_modificable] || 'No se puede modificar en este momento.');
     const bCargar = d.modificable && persona ? el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'btn-pedido-normal', 'data-accion': 'cargar-pedido-normal',
-      onclick: () => abrirPedidoNormal(d, () => cargarPedido(z)) }, d.origen === 'sin_pedido' ? 'Cargar pedido para esta fecha' : 'Cambiar el pedido de esta fecha') : null;
+      onclick: () => abrirPedidoNormal(z, d, () => cargarPedido(z)) }, d.origen === 'sin_pedido' ? 'Cargar pedido para esta fecha' : 'Cambiar el pedido de esta fecha') : null;
     const excepcionVacia = d.origen === 'solo_por_hoy' && d.sin_entrega === true;
     const recargarPedido = () => cargarPedido(z);
     const bHoyNo = d.modificable && persona && d.tiene_habitual && !excepcionVacia ? botonFecha('btn-hoy-no-pedir', 'Hoy no pedir', 'hoy_no_pedir', 'Hoy no pedir',
@@ -686,27 +711,30 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     }, 'Enviando…'));
     return b;
   }
-  function abrirPedidoNormal(d, alExito) {
-    const ed = editorLineas(apoyo.productos, d.origen === 'sin_pedido' ? [] : (d.lineas || []).filter(l => Number.isInteger(l.producto_id)), { idBase: 'pn' });
-    const zona = el('div', { class: 'stack', id: 'pn-aviso' });
-    const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-pedido' }, 'Guardar pedido');
-    const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-      el('p', { class: 'muted small', text: d.tiene_habitual
-        ? 'La persona tiene habitual este día: el pedido se guarda como “solo por hoy” y reemplaza el habitual únicamente para el ' + fmtMin(fecha) + '.'
-        : 'La persona no tiene habitual este día: se guarda como pedido nuevo para el ' + fmtMin(fecha) + '.' }),
-      el('p', { class: 'muted small', text: 'El sistema confirma el tipo al guardar. Se puede cambiar hasta las 22:00 del día anterior; cada cambio queda como una versión nueva.' }),
-      ed.nodo, b, zona);
-    const m = modal('Pedido de ' + (persona.nombre || pid) + ' — ' + fmtCorta(fecha), form);
-    form.addEventListener('submit', conBloqueo(b, async () => {
-      montar(zona);
-      const l = ed.leer();
-      if (l.error) return montar(zona, aviso('error', l.error));
-      await escribir(ctx, zona, 'crear_pedido_normal', { persona_id: pid, rol_pedido: rol, fecha, items: l.lineas }, async (r) => {
-        m.cerrar(); montar(avisos, avisoNegocio(r));
+  // Cargar / cambiar el pedido de la fecha con el catálogo + carrito, dentro de la tarjeta del pedido. Se guarda igual que antes:
+  // crear_pedido_normal { persona_id, rol_pedido, fecha, items } (el backend decide el tipo: solo por hoy / pedido nuevo).
+  function abrirPedidoNormal(z, d, alExito) {
+    montar(avisos);
+    const iniciales = d.origen === 'sin_pedido' ? [] : (d.lineas || []).filter(l => Number.isInteger(l.producto_id));
+    const arm = armadorPedido({
+      productos: productosArmador(apoyo), iniciales, conservarIniciales: true, mostrarPrecios: false,
+      titulo: 'Pedido del ' + fmtCorta(fecha), textoEnviar: 'Guardar pedido', idEnviar: 'btn-guardar-pedido', idAviso: 'pn-aviso',
+      avisoDia: (d.tiene_habitual
+        ? 'Tiene habitual este día: se guarda como “solo por hoy” y reemplaza el habitual únicamente para el ' + fmtMin(fecha) + '.'
+        : 'No tiene habitual este día: se guarda como pedido nuevo para el ' + fmtMin(fecha) + '.') + ' Se puede cambiar hasta las 22:00 del día anterior.',
+      cargarFoto: cargadorFotosAdmin(ctx, apoyo), alCancelar: alExito,
+      alEnviar: (items, zona) => escribir(ctx, zona, 'crear_pedido_normal', { persona_id: pid, rol_pedido: rol, fecha, items }, async (r) => {
+        montar(avisos, avisoNegocio(r));
         toast((OK_TXT[r.codigo] || 'Listo.') + (r.datos && r.datos.tipo_operacion ? ' (' + (ORIGEN_TXT[r.datos.tipo_operacion] || r.datos.tipo_operacion) + ')' : ''));
         await alExito();
-      });
-    }, 'Guardando…'));
+      }),
+    });
+    z.dataset.estado = 'editando';
+    montar(z, el('div', { class: 'stack arm-marco', id: 'pn-form' },
+      el('div', { class: 'arm-intro' }, el('h3', { class: 'arm-titulo', text: 'Pedido de ' + (persona.nombre || pid) + ' — ' + fmtCorta(fecha) }),
+        el('p', { class: 'muted small', text: 'Elegí productos y cantidades. El sistema confirma el tipo al guardar; cada cambio queda como una versión nueva.' })),
+      arm.nodo));
+    z.scrollIntoView({ block: 'start' });
   }
 
   // ---- habitual vigente ----
@@ -722,18 +750,18 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     const d = res.r.datos;
     const recargar = () => cargarHabitual(z);
     if (!d.tiene_habitual) {
-      const b = persona ? el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'btn-configurar-habitual', onclick: () => abrirHabitual('configurar_recurrente', null, recargar) }, 'Configurar habitual') : null;
+      const b = persona ? el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'btn-configurar-habitual', onclick: () => abrirHabitual(z, 'configurar_recurrente', null, recargar) }, 'Configurar habitual') : null;
       return montar(z, head(b), el('p', { class: 'muted', 'data-habitual': 'no', text: 'No tiene pedido habitual. Recurrente significa “previsto”: no genera deuda.' }));
     }
     const diasConLinea = d.dias.map(x => x.dia);
-    const bAgregar = persona && diasConLinea.length < 7 ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-agregar-dia', onclick: () => abrirHabitual('agregar_dia', diasConLinea, recargar) }, 'Agregar día') : null;
+    const bAgregar = persona && diasConLinea.length < 7 ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-agregar-dia', onclick: () => abrirHabitual(z, 'agregar_dia', diasConLinea, recargar) }, 'Agregar día') : null;
     const dias = d.dias.slice().sort((a, b) => DIAS.indexOf(a.dia) - DIAS.indexOf(b.dia));
     montar(z, head(bAgregar),
       el('div', { class: 'hab-dias', 'data-habitual': 'si' }, dias.map(dia => {
         const productos = dia.lineas.filter(l => !esAncla(l));
         const log = logisticaDia(dia.lineas);
         const b = persona ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'editar-dia-habitual', 'data-dia': dia.dia }, 'Editar día') : null;
-        if (b) b.addEventListener('click', () => abrirDia(dia.dia, productos, log, recargar));
+        if (b) b.addEventListener('click', () => abrirDia(z, dia.dia, productos, log, recargar));
         return el('div', { class: 'hab-dia', 'data-dia': dia.dia },
           el('div', { class: 'hab-dia-head' }, el('strong', { text: DIA_TXT[dia.dia] || dia.dia }),
             el('span', { class: 'chips' }, el('span', { class: 'chip', 'data-salida': log.salida || '', text: salidaTxt(log.salida) }),
@@ -746,56 +774,78 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
       })),
       el('p', { class: 'muted small', text: 'Los cambios del habitual no se pueden hacer mientras se cierra la producción (desde las 22:00 hasta el cierre). Las fechas ya cerradas no cambian.' }));
   }
-  function abrirHabitual(accion, diasOcupados, alExito) {
+  // Selects de logística (salida / repartidor) con las mismas opciones de siempre.
+  function selectSalida(id, actual) {
+    const sS = el('select', { class: 'select', id }, el('option', { value: '', text: 'Sin salida' }), SALIDAS.map(x => el('option', { value: x, text: salidaTxt(x) })));
+    if (actual && !SALIDAS.includes(actual)) sS.appendChild(el('option', { value: actual, text: salidaTxt(actual) }));
+    sS.value = actual || ''; return sS;
+  }
+  function selectRepartidor(id, actual) {
+    const sR = el('select', { class: 'select', id }, el('option', { value: '', text: 'Sin repartidor' }), repartidores(apoyo).map(p => el('option', { value: p.persona_id, text: str(p.nombre) || p.persona_id })));
+    if (actual && !repartidores(apoyo).some(p => p.persona_id === actual)) sR.appendChild(el('option', { value: actual, text: nombreDe(apoyo, actual) }));
+    sR.value = actual || ''; return sR;
+  }
+  const campo = (id, texto, ctrl) => el('div', { class: 'field' }, el('label', { for: id, text: texto }), ctrl);
+  const unidadDe = (pid) => { const p = (apoyo.productos || []).find(x => x.producto_id === pid); return p && p.unidad ? p.unidad : null; };
+  function marcoHabitual(z, titulo, sub, arm) {
+    z.dataset.estado = 'editando';
+    montar(z, el('div', { class: 'stack arm-marco', id: 'hab-form' },
+      el('div', { class: 'arm-intro' }, el('h3', { class: 'arm-titulo', text: titulo }), el('p', { class: 'muted small', text: sub })), arm.nodo));
+    z.scrollIntoView({ block: 'start' });
+  }
+
+  // Configurar habitual / Agregar día: un día por vez con el catálogo + carrito. Día, salida y repartidor van arriba del carrito y se aplican
+  // a todas las líneas del día (mismos campos que antes: dia_semana, unidad, salida, repartidor_persona_id). Para más días: "Agregar día".
+  function abrirHabitual(z, accion, diasOcupados, alExito) {
+    montar(avisos);
     const libres = DIAS.filter(dd => !(diasOcupados || []).includes(dd));
-    const sDia = accion === 'agregar_dia' ? el('select', { class: 'select', id: 'hab-dia' }, libres.map(dd => el('option', { value: dd, text: DIA_TXT[dd] }))) : null;
-    const ed = editorLineas(apoyo.productos, [], { idBase: 'hab', conDia: accion === 'configurar_recurrente', conSalida: true, reps: repartidores(apoyo) });
-    const zona = el('div', { class: 'stack', id: 'hab-aviso' });
-    const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-habitual' }, accion === 'agregar_dia' ? 'Agregar día' : 'Guardar habitual');
-    const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-      sDia ? el('div', { class: 'field' }, el('label', { for: 'hab-dia', text: 'Día' }), sDia) : el('p', { class: 'muted small', text: 'Una línea por producto y día. Salida y repartidor son opcionales.' }),
-      ed.nodo, b, zona);
-    const m = modal((accion === 'agregar_dia' ? 'Agregar día al habitual — ' : 'Configurar habitual — ') + (persona.nombre || pid), form);
-    form.addEventListener('submit', conBloqueo(b, async () => {
-      montar(zona);
-      const l = ed.leer();
-      if (l.error) return montar(zona, aviso('error', l.error));
-      const campos = accion === 'agregar_dia' ? { persona_id: pid, dia_semana: sDia.value, lineas: l.lineas } : { persona_id: pid, lineas: l.lineas };
-      await escribir(ctx, zona, accion, campos, async (r) => { m.cerrar(); montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
-    }, 'Guardando…'));
+    const sDia = el('select', { class: 'select', id: 'hab-dia' }, libres.map(dd => el('option', { value: dd, text: DIA_TXT[dd] })));
+    const sSal = selectSalida('hab-salida', null);
+    const sRep = selectRepartidor('hab-repartidor', null);
+    const arm = armadorPedido({
+      productos: productosArmador(apoyo), iniciales: [], mostrarPrecios: false,
+      titulo: 'Habitual del día', textoEnviar: accion === 'agregar_dia' ? 'Agregar día' : 'Guardar habitual', idEnviar: 'btn-guardar-habitual', idAviso: 'hab-aviso',
+      encabezado: el('div', { class: 'stack arm-logistica' }, campo('hab-dia', 'Día', sDia), el('div', { class: 'form-grid two' }, campo('hab-salida', 'Salida (opcional)', sSal), campo('hab-repartidor', 'Repartidor (opcional)', sRep))),
+      cargarFoto: cargadorFotosAdmin(ctx, apoyo), alCancelar: alExito,
+      alEnviar: (items, zona) => {
+        const lineas = items.map(it => {
+          const o = Object.assign({}, it);
+          if (accion === 'configurar_recurrente') o.dia_semana = sDia.value;
+          const u = unidadDe(it.producto_id); if (u) o.unidad = u;
+          o.salida = sSal.value || null; o.repartidor_persona_id = sRep.value || null;
+          return o;
+        });
+        const campos = accion === 'agregar_dia' ? { persona_id: pid, dia_semana: sDia.value, lineas } : { persona_id: pid, lineas };
+        return escribir(ctx, zona, accion, campos, async (r) => { montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
+      },
+    });
+    marcoHabitual(z, (accion === 'agregar_dia' ? 'Agregar día al habitual — ' : 'Configurar habitual — ') + (persona.nombre || pid),
+      accion === 'agregar_dia' ? 'Elegí el día y sus productos. Salida y repartidor valen para todo el día.' : 'Elegí el primer día y sus productos. Después podés sumar más días con “Agregar día”.', arm);
   }
   // Editar día completo (editar_habitual_dia): todas las líneas del día (agregar / quitar / cantidades > 0, sin repetidos) + salida y repartidor del DÍA.
   // La logística se envía solo si cambió. El historial anterior se conserva (lo versiona Recurrentes Cambios PROD).
-  function abrirDia(dia, productos, log, alExito) {
-    const ed = editorLineas(apoyo.productos, productos, { idBase: 'hd' });
-    const sSal = el('select', { class: 'select', id: 'hd-salida' }, el('option', { value: '', text: 'Sin salida' }), SALIDAS.map(x => el('option', { value: x, text: salidaTxt(x) })));
-    const sRep = el('select', { class: 'select', id: 'hd-repartidor' }, el('option', { value: '', text: 'Sin repartidor' }), repartidores(apoyo).map(p => el('option', { value: p.persona_id, text: str(p.nombre) || p.persona_id })));
-    if (log.salida && !SALIDAS.includes(log.salida)) sSal.appendChild(el('option', { value: log.salida, text: salidaTxt(log.salida) }));
-    if (log.repartidor_persona_id && !repartidores(apoyo).some(p => p.persona_id === log.repartidor_persona_id)) sRep.appendChild(el('option', { value: log.repartidor_persona_id, text: nombreDe(apoyo, log.repartidor_persona_id) }));
-    sSal.value = log.salida || ''; sRep.value = log.repartidor_persona_id || '';
-    const zona = el('div', { class: 'stack', id: 'hd-aviso' });
-    const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-dia' }, 'Guardar día');
-    const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-      el('p', { class: 'muted small', text: 'Habitual completo del ' + (DIA_TXT[dia] || dia).toLowerCase() + ': agregá, quitá o cambiá productos y cantidades. Salida y repartidor valen para todo el día.' }),
-      el('div', { class: 'form-grid two' }, el('div', { class: 'field' }, el('label', { for: 'hd-salida', text: 'Salida del día' }), sSal),
-        el('div', { class: 'field' }, el('label', { for: 'hd-repartidor', text: 'Repartidor del día' }), sRep)),
-      ed.nodo, b, zona);
-    const m = modal('Editar día — ' + (DIA_TXT[dia] || dia) + ' · ' + (persona.nombre || pid), form);
+  function abrirDia(z, dia, productos, log, alExito) {
+    montar(avisos);
+    const sSal = selectSalida('hd-salida', log.salida);
+    const sRep = selectRepartidor('hd-repartidor', log.repartidor_persona_id);
     const firma = (ls) => JSON.stringify(ls.map(l => [l.producto_id, l.cantidad, str(l.detalle_libre)]).sort((x, y) => x[0] - y[0]));
-    form.addEventListener('submit', conBloqueo(b, async () => {
-      montar(zona);
-      const l = ed.leer();
-      if (l.error) return montar(zona, aviso('error', l.error));
-      const prods = l.lineas.map(x => x.producto_id);
-      if (new Set(prods).size !== prods.length) return montar(zona, aviso('error', 'Hay un producto repetido: juntalo en una sola línea.'));
-      const logistica = {};
-      if ((sSal.value || null) !== (log.salida || null)) logistica.salida = sSal.value || null;
-      if ((sRep.value || null) !== (log.repartidor_persona_id || null)) logistica.repartidor_persona_id = sRep.value || null;
-      if (firma(l.lineas) === firma(productos) && !Object.keys(logistica).length) return montar(zona, aviso('info', 'No hay cambios para guardar.'));
-      const campos = { persona_id: pid, dia_semana: dia, lineas: l.lineas };
-      if (Object.keys(logistica).length) campos.logistica = logistica;
-      await escribir(ctx, zona, 'editar_habitual_dia', campos, async (r) => { m.cerrar(); montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
-    }, 'Guardando…'));
+    const arm = armadorPedido({
+      productos: productosArmador(apoyo), iniciales: productos.filter(l => Number.isInteger(l.producto_id)), conservarIniciales: true, mostrarPrecios: false,
+      titulo: 'Habitual del ' + (DIA_TXT[dia] || dia).toLowerCase(), textoEnviar: 'Guardar día', idEnviar: 'btn-guardar-dia', idAviso: 'hd-aviso',
+      encabezado: el('div', { class: 'form-grid two arm-logistica' }, campo('hd-salida', 'Salida del día', sSal), campo('hd-repartidor', 'Repartidor del día', sRep)),
+      cargarFoto: cargadorFotosAdmin(ctx, apoyo), alCancelar: alExito,
+      alEnviar: (items, zona) => {
+        const logistica = {};
+        if ((sSal.value || null) !== (log.salida || null)) logistica.salida = sSal.value || null;
+        if ((sRep.value || null) !== (log.repartidor_persona_id || null)) logistica.repartidor_persona_id = sRep.value || null;
+        if (firma(items) === firma(productos) && !Object.keys(logistica).length) { montar(zona, aviso('info', 'No hay cambios para guardar.')); return null; }
+        const campos = { persona_id: pid, dia_semana: dia, lineas: items };
+        if (Object.keys(logistica).length) campos.logistica = logistica;
+        return escribir(ctx, zona, 'editar_habitual_dia', campos, async (r) => { montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
+      },
+    });
+    marcoHabitual(z, 'Editar día — ' + (DIA_TXT[dia] || dia) + ' · ' + (persona.nombre || pid),
+      'Habitual completo del ' + (DIA_TXT[dia] || dia).toLowerCase() + ': agregá, quitá o cambiá productos y cantidades. Salida y repartidor valen para todo el día.', arm);
   }
 
   // ---- extras de la persona en la fecha ----
