@@ -6,6 +6,8 @@
 //   - Nuevas solicitudes de registro del inicio público (registros.js): revisar, aprobar (crea el cliente) o rechazar.
 //   - Consultas de clientes/repartidores (soporte.js): tomar, responder o derivar a Finanzas.
 //   - Revisiones financieras derivadas a Admin Finanzas (revisiones.js): derivar y ver su estado.
+//   - Habituales sin salida o repartidor (2026-10-08): pedidos_fecha de los próximos 7 días (un día de cada día de la semana), renglones de origen
+//     recurrente sin salida, o sin repartidor (salvo que la persona sea repartidora). Pasa cuando el cliente/repartidor arma su propio día habitual.
 // Nada se resuelve acá: cada pendiente lleva a la sección donde se resuelve, o indica que hoy no hay una acción en la página.
 import { el, montar, aviso, confirmar, conBloqueo, toast } from '../../ui.js';
 import * as ops from '../../ops.js';
@@ -22,7 +24,7 @@ const sumarDias = (f, n) => new Date(Date.parse(f + 'T12:00:00Z') + n * 86400e3)
 const fmtCorta = (f) => FECHA_RE.test(f || '') ? new Intl.DateTimeFormat('es-AR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(f + 'T12:00:00Z')) : '—';
 const sinTilde = (s) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const filtros = { desde: null, hasta: null, grupo: 'todos', estado: 'todos', texto: '' };
-const GRUPO_TXT = { produccion: 'Producción', cierre: 'Cierre de producción', extra: 'Extras', operacion: 'Operaciones', revision: 'Revisiones financieras' };
+const GRUPO_TXT = { produccion: 'Producción', cierre: 'Cierre de producción', extra: 'Extras', operacion: 'Operaciones', revision: 'Revisiones financieras', habitual: 'Habituales sin salida o repartidor' };
 const ESTADO_TXT = { devuelta_finanzas: 'Devuelta por Finanzas', requiere_revision: 'Requiere revisión', por_resolver: 'Por resolver', incompleta: 'Incompleta' };
 const ESTADO_CHIP = { devuelta_finanzas: 'ok', requiere_revision: 'off', por_resolver: 'warn', incompleta: 'warn' };
 const ORDEN_ESTADO = { devuelta_finanzas: 0, requiere_revision: 1, incompleta: 2, por_resolver: 3 };
@@ -75,10 +77,12 @@ export function vistaPendientes(ctx, cont) {
     montar(cuerpo, el('div', { class: 'skeleton' }), el('div', { class: 'skeleton' }), el('div', { class: 'skeleton' }));
     if (!pRev) { pRev = ctx.pedir(TIPO, 'revisiones_listar', {}); secRev.actualizar(pRev); }
     const pRevActual = pRev; pRev = null; // el próximo "Actualizar" vuelve a leer
-    const [rep, rev, pen, ini, rr, rvs] = await Promise.all([
+    const fechasHab = [1, 2, 3, 4, 5, 6, 7].map(n => sumarDias(hoyART(), n));
+    const pHab = Promise.all([ctx.pedir(TIPO, 'listar_personas', { buscar: '' }), ...fechasHab.map(f => ctx.pedir(TIPO, 'pedidos_fecha', { fecha: f }))]);
+    const [rep, rev, pen, ini, rr, rvs, hab] = await Promise.all([
       ctx.pedir(TIPO, 'reportes_produccion', { filtros: { fecha_desde: filtros.desde, fecha_hasta: filtros.hasta } }),
       ctx.pedir(TIPO, 'extras_admin', { modo: 'revision' }), ctx.pedir(TIPO, 'extras_admin', { modo: 'pendientes' }),
-      ctx.pedir(TIPO, 'historial_listar', { filtros: { estado: 'iniciada' }, tam_pagina: 50 }), ctx.pedir(TIPO, 'historial_listar', { filtros: { estado: 'requiere_revision' }, tam_pagina: 50 }), pRevActual]);
+      ctx.pedir(TIPO, 'historial_listar', { filtros: { estado: 'iniciada' }, tam_pagina: 50 }), ctx.pedir(TIPO, 'historial_listar', { filtros: { estado: 'requiere_revision' }, tam_pagina: 50 }), pRevActual, pHab]);
     if (!cuerpo.isConnected) return;
     cuerpo.dataset.estado = 'listo';
     for (const x of [rep, rev, pen, ini, rr, rvs]) if (x.r && ctx.revisarFinSesion(x.r)) return;
@@ -134,6 +138,33 @@ export function vistaPendientes(ctx, cont) {
           causa: r.resumen || '—', origen: 'Derivada ' + fmtHora(r.fecha_derivacion) + (r.revisado_por ? ' · revisó ' + r.revisado_por : '') + ' · devuelta ' + fmtHora(r.fecha_devolucion), revision: r });
       }
     } else fuentesFallidas.push('Revisiones financieras');
+    // Habituales sin salida o repartidor (los asigna Admin General desde el habitual de la persona).
+    const [hPer, ...hFechas] = hab;
+    if (hFechas.some(x => x.r && ctx.revisarFinSesion(x.r))) return;
+    const pers = hPer.r && hPer.r.success && hPer.r.datos && Array.isArray(hPer.r.datos.personas) ? hPer.r.datos.personas : [];
+    const esRep = (pid) => { const p = pers.find(x => x && x.persona_id === pid); return !!(p && Array.isArray(p.roles) && p.roles.some(r => r.rol === 'repartidor' && r.estado === 'activo')); };
+    const hab7 = new Map();
+    hFechas.forEach((x, i) => {
+      if (!(x.r && x.r.success && x.r.datos && Array.isArray(x.r.datos.renglones))) { fuentesFallidas.push('Habituales'); return; }
+      const porPersona = new Map();
+      for (const r of x.r.datos.renglones) {
+        if (r.origen !== 'recurrente' || !/^PER-/.test(r.persona_id || '')) continue;
+        const g = porPersona.get(r.persona_id) || { nombre: r.nombre, salida: false, rep: false };
+        if (r.salida) g.salida = true;
+        if (r.repartidor_persona_id) g.rep = true;
+        porPersona.set(r.persona_id, g);
+      }
+      for (const [pid, g] of porPersona) {
+        const falta = [!g.salida ? 'salida' : null, !g.rep && !esRep(pid) ? 'repartidor' : null].filter(Boolean);
+        if (!falta.length) continue;
+        const f = fechasHab[i]; const dia = x.r.datos.dia_semana || '';
+        hab7.set(pid + '-' + dia, { id: 'hab-' + pid + '-' + dia, grupo: 'habitual', estado: 'por_resolver', fecha: f, persona_id: pid, persona_nombre: g.nombre || pid, codigo: 'HABITUAL_SIN_' + falta.join('_').toUpperCase(),
+          titulo: 'Habitual ' + (dia ? 'de los ' + dia.replace('miercoles', 'miércoles').replace('sabado', 'sábado') + ' ' : '') + 'sin ' + falta.join(' ni '),
+          causa: 'Asignale ' + (falta.length > 1 ? 'la salida y el repartidor' : falta[0] === 'salida' ? 'la salida' : 'el repartidor') + ' en el habitual de la persona. Mientras tanto el pedido entra igual en la producción' + (!g.salida ? ' (en la planilla queda en “sin salida”)' : '') + '.',
+          origen: 'Habitual · se revisan los próximos 7 días', ir: { href: '#/admin/pedidos/persona/' + encodeURIComponent(pid) + '/' + f, txt: 'Abrir el habitual de la persona' } });
+      }
+    });
+    out.push(...hab7.values());
     out.sort((a, b) => (ORDEN_ESTADO[a.estado] - ORDEN_ESTADO[b.estado]) || String(b.fecha || '').localeCompare(String(a.fecha || '')));
     items = out;
     pintar();
