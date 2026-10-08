@@ -8,7 +8,7 @@ import * as ops from '../../ops.js';
 // Rutas de la Web API PROD usadas por el panel (tipo/accion). 'usuario' = consultas de la propia persona.
 export const RUTA = {
   mi_perfil: 'usuario', mi_catalogo: 'usuario', imagen_producto: 'usuario',
-  mi_habitual: 'recurrente', cambio_vigente: 'recurrente', editar_habitual_dia: 'recurrente',
+  mi_habitual: 'recurrente', cambio_vigente: 'recurrente', editar_habitual_dia: 'recurrente', nuevo_dia_habitual: 'recurrente',
   mi_pedido_fecha: 'pedido', crear_pedido_normal: 'pedido', mis_pedidos: 'pedido', hoy_no_pedir: 'pedido', anular: 'pedido',
   mis_extras: 'extra', solicitar_extra: 'extra',
   mi_cuenta: 'cuenta',
@@ -72,9 +72,10 @@ const MSJ = {
   SIN_RECURRENTE_PARA_FECHA: 'No tenés habitual ese día: no hay nada que dejar de pedir.',
   SIN_EXCEPCION_VIGENTE: 'No hay un cambio para ese día que se pueda deshacer.',
   REQUIERE_REVISION: 'Golden tiene que revisar este pedido. No se cambió nada.',
+  DIA_YA_EXISTE: 'Ya tenés habitual ese día: editalo desde Mi habitual.',
 };
 const OK_TXT = { PEDIDO_REGISTRADO: 'Pedido registrado.', VERSION_SUPERADA: 'Pedido registrado.', CAMBIO_VIGENTE_APLICADO: 'Tu habitual se actualizó.', EXTRA_SOLICITADO: 'Extra solicitado. Golden lo va a revisar.',
-  HABITUAL_DIA_EDITADO: 'Tu habitual se actualizó.', HOY_NO_PEDIR_REGISTRADO: 'Listo: ese día no recibís pedido. Tu habitual no cambia.', PEDIDO_ANULADO: 'Listo: se anuló el pedido de ese día.',
+  HABITUAL_DIA_EDITADO: 'Tu habitual se actualizó.', HABITUAL_DIA_CREADO: 'Listo: agregaste el día a tu habitual.', HOY_NO_PEDIR_REGISTRADO: 'Listo: ese día no recibís pedido. Tu habitual no cambia.', PEDIDO_ANULADO: 'Listo: se anuló el pedido de ese día.',
   OPERACION_YA_PROCESADA: 'Ya estaba registrado. No se duplicó.', OK: 'Listo.' };
 export const textoOk = (r) => OK_TXT[r.codigo] || r.mensaje || 'Listo.';
 export function avisoCli(r) {
