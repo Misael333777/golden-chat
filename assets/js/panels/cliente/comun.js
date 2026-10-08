@@ -7,7 +7,7 @@ import * as ops from '../../ops.js';
 
 // Rutas de la Web API PROD usadas por el panel (tipo/accion). 'usuario' = consultas de la propia persona.
 export const RUTA = {
-  mi_perfil: 'usuario', mi_catalogo: 'usuario',
+  mi_perfil: 'usuario', mi_catalogo: 'usuario', imagen_producto: 'usuario',
   mi_habitual: 'recurrente', cambio_vigente: 'recurrente', editar_habitual_dia: 'recurrente',
   mi_pedido_fecha: 'pedido', crear_pedido_normal: 'pedido', mis_pedidos: 'pedido', hoy_no_pedir: 'pedido', anular: 'pedido',
   mis_extras: 'extra', solicitar_extra: 'extra',
@@ -110,7 +110,7 @@ export async function catalogo(ctx) {
   const r = await traer(ctx, 'mi_catalogo');
   if (r.error) return r;
   const productos = (r.datos.productos || []).map(p => ({ producto_id: Number.isInteger(p.product_id) ? p.product_id : p.producto_id, nombre: str(p.nombre) || 'Producto', categoria: str(p.categoria), unidad: str(p.unidad), precio: typeof p.precio === 'number' ? p.precio : null,
-    imagen_src: str(p.imagen_src) })) // imagen_src: reservado para una futura consulta segura de fotos (hoy el backend no la envía)
+    tiene_imagen: p.tiene_imagen === true })) // tiene_imagen: la foto se pide aparte (usuario/imagen_producto) solo si es true
     .filter(p => Number.isInteger(p.producto_id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   return { productos, tipo_catalogo: str(r.datos.tipo_catalogo) };
 }

@@ -6,6 +6,7 @@
 //  - 'Volver al habitual' (pedido/anular) sobre un 'solo por ese día'; 'Cancelar pedido' (pedido/anular) sobre un pedido nuevo sin habitual.
 import { el, montar, conBloqueo, toast, confirmar, modal } from '../../ui.js';
 import { armadorPedido } from './armador.js';
+import { cargarFoto } from './fotos.js';
 import { leer, catalogo, escribir, cabecera, chipOrigen, listaLineas, pesos, hoyART, sumarDias, fmtFecha, FECHA_RE, cant, num, textoOk, diaDe, DIA_TXT, raiz, avisoCli } from './comun.js';
 
 const MOTIVO_TXT = { PRODUCCION_CERRADA: 'La producción de ese día ya cerró o pasó el horario de corte (22:00 del día anterior).', FECHA_PASADA: 'Esa fecha ya pasó.',
@@ -70,7 +71,7 @@ export function vistaPedidoFecha(ctx, cont, fechaRuta) {
     const avisoDia = d.tiene_habitual
       ? 'Tenés habitual los ' + (DIA_TXT[diaDe(fecha)] || '').toLowerCase() + ': este pedido reemplaza tu habitual SOLO el ' + fmtFecha(fecha).toLowerCase() + '. Tu habitual no cambia.'
       : 'No tenés habitual ese día: se carga como pedido para el ' + fmtFecha(fecha).toLowerCase() + '.';
-    const arm = armadorPedido({ productos: cat.productos, iniciales, avisoDia, alCancelar: d.origen === 'sin_pedido' ? null : () => montar(editor), alEnviar: (items) => revisar(items) });
+    const arm = armadorPedido({ productos: cat.productos, iniciales, avisoDia, alCancelar: d.origen === 'sin_pedido' ? null : () => montar(editor), alEnviar: (items) => revisar(items), cargarFoto: (id) => cargarFoto(ctx, id) });
     montar(editor, el('div', { class: 'stack arm-marco', id: 'pf-caja', 'data-paso': 'datos' },
       el('div', { class: 'arm-intro' }, el('h3', { class: 'arm-titulo', text: '¡Hacé tu pedido!' }), el('p', { class: 'muted small', text: 'Pedido para el ' + fmtFecha(fecha).toLowerCase() + '. Elegí los productos y la cantidad; revisás todo antes de enviar.' })),
       arm.nodo));

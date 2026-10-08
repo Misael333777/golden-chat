@@ -2,27 +2,36 @@
 // Solo arma la lista { producto_id, cantidad, detalle_libre? }: NO envía precios ni lista de precio. Los precios que se muestran salen de
 // mi_catalogo (el backend ya devuelve el precio de la condición de la persona y solo productos activos y visibles para su rol)
 // y el total es un ESTIMADO. El envío lo hace quien llama (mismo circuito de siempre: vista previa → confirmar → pedido/crear_pedido_normal).
-// Imágenes: hoy el catálogo de Cliente/Repartidor no trae fotos (son archivos privados). Cada tarjeta usa fotoProducto(): si algún día
-// el catálogo trae una imagen segura (p.imagen_src, data: o similar, entregada por una consulta del backend), reemplaza el placeholder sin tocar la vista.
+// Imágenes: el catálogo solo dice tiene_imagen (sin enlaces). Cada tarjeta usa fotoProducto(): arranca con el placeholder y, si el producto
+// tiene foto y se pasó opc.cargarFoto, la pide a la Web API (usuario/imagen_producto, solo producto_id) cuando la tarjeta aparece en pantalla.
 import { el, montar, aviso } from '../../ui.js';
 import { pesos, num, leerNum } from './comun.js';
+import { alAparecer } from './fotos.js';
 
 const sinTilde = (s) => Array.from(String(s || '').normalize('NFD')).filter(ch => { const k = ch.charCodeAt(0); return k < 768 || k > 879; }).join('').toLowerCase();
 const redondear = (q) => Math.round(q * 1000) / 1000;
 const iniciales = (n) => String(n || '').split(/\s+/).filter(w => /^[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'G';
 
 // Foto del producto: placeholder Golden (iniciales sobre crema con trigo). Preparado para reemplazarse por la foto real.
-export function fotoProducto(p, chica) {
-  const caja = el('div', { class: 'arm-foto' + (chica ? ' arm-foto-chica' : ''), 'data-foto': p.imagen_src ? 'si' : 'placeholder', 'aria-hidden': 'true' });
-  if (typeof p.imagen_src === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(p.imagen_src)) {
-    caja.appendChild(el('img', { src: p.imagen_src, alt: '', loading: 'lazy', decoding: 'async' }));
-  } else {
-    caja.appendChild(el('span', { class: 'arm-foto-ini', text: iniciales(p.nombre) }));
+const DATA_IMG = /^data:image\/(png|jpeg|webp);base64,/;
+// cargar(producto_id) -> Promise<data:...|null> (opcional). Sin foto o si falla: queda el placeholder.
+export function fotoProducto(p, chica, cargar) {
+  const caja = el('div', { class: 'arm-foto' + (chica ? ' arm-foto-chica' : ''), 'data-foto': 'placeholder', 'aria-hidden': 'true' });
+  const poner = (src) => { montar(caja, el('img', { src, alt: '', decoding: 'async' })); caja.dataset.foto = 'si'; };
+  caja.appendChild(el('span', { class: 'arm-foto-ini', text: iniciales(p.nombre) }));
+  if (typeof p.imagen_src === 'string' && DATA_IMG.test(p.imagen_src)) poner(p.imagen_src);
+  else if (p.tiene_imagen === true && typeof cargar === 'function') {
+    caja.dataset.foto = 'cargando';
+    alAparecer(caja, () => {
+      cargar(p.producto_id).then((src) => {
+        if (typeof src === 'string' && DATA_IMG.test(src)) poner(src); else caja.dataset.foto = 'placeholder';
+      }, () => { caja.dataset.foto = 'placeholder'; });
+    });
   }
   return caja;
 }
 
-// opciones: { productos, iniciales: [{producto_id,cantidad,detalle_libre}], avisoDia (texto), alEnviar(items) , alCancelar() }
+// opciones: { productos, iniciales: [{producto_id,cantidad,detalle_libre}], avisoDia (texto), alEnviar(items) , alCancelar(), cargarFoto(producto_id) }
 // Devuelve { nodo }.
 export function armadorPedido(opc) {
   const productos = opc.productos || [];
@@ -70,7 +79,7 @@ export function armadorPedido(opc) {
       && (!q || sinTilde([p.nombre, p.categoria, p.unidad].filter(Boolean).join(' ')).includes(q)));
     if (!vis.length) return montar(grilla, el('div', { class: 'arm-vacio', 'data-vacio': 'true', text: q ? 'No encontramos productos con ese nombre.' : 'No hay productos en esta categoría.' }));
     montar(grilla, vis.map(p => el('article', { class: 'arm-card' + (carrito.has(p.producto_id) ? ' en-pedido' : ''), 'data-producto': String(p.producto_id), 'data-categoria': p.categoria || 'Otros' },
-      fotoProducto(p),
+      fotoProducto(p, false, opc.cargarFoto),
       el('div', { class: 'arm-card-txt' },
         el('h4', { class: 'arm-nombre', text: p.nombre }),
         el('p', { class: 'arm-precio' }, el('strong', { text: p.precio !== null ? pesos(p.precio) : 'Sin precio' }), p.unidad ? el('span', { class: 'arm-unidad', text: ' / ' + p.unidad }) : null)),
@@ -111,7 +120,7 @@ export function armadorPedido(opc) {
       const iDet = el('input', { class: 'input arm-det', id: 'arm-det-' + x.pid, maxlength: '200', placeholder: 'Aclaración (opcional)', 'aria-label': 'Aclaración para ' + x.p.nombre, autocomplete: 'off', value: x.detalle });
       iDet.addEventListener('input', () => { const c = carrito.get(x.pid); if (c) c.detalle = iDet.value; });
       return el('div', { class: 'arm-item', 'data-producto': String(x.pid) },
-        fotoProducto(x.p, true),
+        fotoProducto(x.p, true, opc.cargarFoto),
         el('div', { class: 'arm-item-txt' }, el('span', { class: 'arm-item-nombre', text: x.p.nombre }),
           el('span', { class: 'muted small', text: (x.p.precio !== null ? pesos(x.p.precio) : 'sin precio') + (x.p.unidad ? ' / ' + x.p.unidad : '') })),
         el('span', { class: 'arm-item-sub', text: sub !== null ? pesos(sub) : '—' }),
