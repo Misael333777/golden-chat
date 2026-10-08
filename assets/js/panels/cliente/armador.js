@@ -31,15 +31,27 @@ export function fotoProducto(p, chica, cargar) {
   return caja;
 }
 
-// opciones: { productos, iniciales: [{producto_id,cantidad,detalle_libre}], avisoDia (texto), alEnviar(items) , alCancelar(), cargarFoto(producto_id) }
+// opciones: { productos, iniciales: [{producto_id,cantidad,detalle_libre}], avisoDia (texto), alEnviar(items, zona) , alCancelar(), cargarFoto(producto_id),
+//   mostrarPrecios (por defecto true; Admin → false), titulo ('Tu pedido'), textoEnviar ('Enviar pedido'), idEnviar ('arm-enviar'),
+//   encabezado (nodo opcional arriba del carrito: p. ej. día, salida y repartidor en Admin), idAviso ('arm-aviso'), conservarIniciales (false) }
+// Si alEnviar devuelve una promesa, el botón queda deshabilitado mientras se guarda (evita doble envío).
 // Devuelve { nodo }.
 export function armadorPedido(opc) {
-  const productos = opc.productos || [];
+  const productos = (opc.productos || []).slice();
+  // conservarIniciales (habitual): un producto ya cargado que hoy no está en el catálogo se mantiene (como en el editor anterior),
+  // marcado "(no disponible)", para no borrarlo sin querer al guardar otro cambio. El backend sigue validando.
+  if (opc.conservarIniciales) for (const i of (opc.iniciales || [])) {
+    if (Number.isInteger(i.producto_id) && i.cantidad > 0 && !productos.some(p => p.producto_id === i.producto_id))
+      productos.push({ producto_id: i.producto_id, nombre: (i.producto || 'Producto ' + i.producto_id) + ' (no disponible)', categoria: 'No disponible', unidad: i.unidad || null, precio: null });
+  }
+  const conPrecio = opc.mostrarPrecios !== false;
+  const textoEnviar = opc.textoEnviar || 'Enviar pedido';
   const porId = new Map(productos.map(p => [p.producto_id, p]));
   // Categorías reales del catálogo, en el orden del catálogo (por id de producto).
   const cats = [];
   for (const p of productos.slice().sort((a, b) => a.producto_id - b.producto_id)) { const c = p.categoria || 'Otros'; if (!cats.includes(c)) cats.push(c); }
   const estado = { texto: '', cat: 'todos' };
+  let enviando = false;
   const carrito = new Map(); // producto_id -> { cantidad, detalle }
   const fuera = [];
   for (const i of (opc.iniciales || [])) {
@@ -82,7 +94,8 @@ export function armadorPedido(opc) {
       fotoProducto(p, false, opc.cargarFoto),
       el('div', { class: 'arm-card-txt' },
         el('h4', { class: 'arm-nombre', text: p.nombre }),
-        el('p', { class: 'arm-precio' }, el('strong', { text: p.precio !== null ? pesos(p.precio) : 'Sin precio' }), p.unidad ? el('span', { class: 'arm-unidad', text: ' / ' + p.unidad }) : null)),
+        conPrecio ? el('p', { class: 'arm-precio' }, el('strong', { text: p.precio !== null ? pesos(p.precio) : 'Sin precio' }), p.unidad ? el('span', { class: 'arm-unidad', text: ' / ' + p.unidad }) : null)
+          : el('p', { class: 'arm-precio' }, el('span', { class: 'arm-unidad', text: p.unidad ? 'Unidad: ' + p.unidad : '' }))),
       selector(p.producto_id, 'arm-cant-' + p.producto_id))));
   }
   iBuscar.addEventListener('input', () => { estado.texto = iBuscar.value; pintarGrilla(); });
@@ -91,17 +104,18 @@ export function armadorPedido(opc) {
   const cuerpoCarrito = el('div', { class: 'arm-items', id: 'arm-items' });
   const contador = el('span', { class: 'arm-badge', id: 'arm-contador', 'aria-live': 'polite' });
   const totalTxt = el('strong', { class: 'arm-total-valor', id: 'arm-total' });
-  const zona = el('div', { class: 'stack', id: 'arm-aviso' });
-  const bEnviar = el('button', { type: 'button', class: 'btn btn-gold arm-enviar', id: 'arm-enviar' }, 'Enviar pedido');
+  const zona = el('div', { class: 'stack', id: opc.idAviso || 'arm-aviso' });
+  const bEnviar = el('button', { type: 'button', class: 'btn btn-gold arm-enviar', id: opc.idEnviar || 'arm-enviar' }, textoEnviar);
   const bCancelar = opc.alCancelar ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'arm-cancelar', 'data-accion': 'cancelar-pedido', onclick: opc.alCancelar }, 'Cancelar') : null;
   const barraMovil = el('button', { type: 'button', class: 'arm-barra-movil', id: 'arm-barra-movil', onclick: () => carritoNodo.scrollIntoView({ behavior: 'smooth', block: 'start' }) });
-  const carritoNodo = el('aside', { class: 'arm-carrito card', id: 'arm-carrito', 'aria-label': 'Tu pedido' },
-    el('div', { class: 'arm-carrito-head' }, el('h3', { text: 'Tu pedido' }), contador),
+  const carritoNodo = el('aside', { class: 'arm-carrito card', id: 'arm-carrito', 'aria-label': opc.titulo || 'Tu pedido' },
+    el('div', { class: 'arm-carrito-head' }, el('h3', { text: opc.titulo || 'Tu pedido' }), contador),
+    opc.encabezado || null,
     opc.avisoDia ? el('p', { class: 'arm-aviso-dia small', id: 'arm-aviso-dia', text: opc.avisoDia }) : null,
     fuera.length ? el('div', { class: 'notice info small', id: 'arm-fuera' }, 'Ya no está disponible y se quitó: ' + fuera.join(', ') + '.') : null,
     cuerpoCarrito,
-    el('div', { class: 'arm-total' }, el('span', { class: 'arm-total-label', text: 'Total (estimado)' }), totalTxt),
-    el('p', { class: 'muted small', text: 'Es un estimado con tus precios de hoy: el importe final lo confirma Golden.' }),
+    conPrecio ? el('div', { class: 'arm-total' }, el('span', { class: 'arm-total-label', text: 'Total (estimado)' }), totalTxt) : null,
+    conPrecio ? el('p', { class: 'muted small', text: 'Es un estimado con tus precios de hoy: el importe final lo confirma Golden.' }) : null,
     zona, bEnviar, bCancelar);
 
   function actualizar() {
@@ -122,16 +136,17 @@ export function armadorPedido(opc) {
       return el('div', { class: 'arm-item', 'data-producto': String(x.pid) },
         fotoProducto(x.p, true, opc.cargarFoto),
         el('div', { class: 'arm-item-txt' }, el('span', { class: 'arm-item-nombre', text: x.p.nombre }),
-          el('span', { class: 'muted small', text: (x.p.precio !== null ? pesos(x.p.precio) : 'sin precio') + (x.p.unidad ? ' / ' + x.p.unidad : '') })),
-        el('span', { class: 'arm-item-sub', text: sub !== null ? pesos(sub) : '—' }),
+          el('span', { class: 'muted small', text: conPrecio ? (x.p.precio !== null ? pesos(x.p.precio) : 'sin precio') + (x.p.unidad ? ' / ' + x.p.unidad : '') : (x.p.unidad ? 'Unidad: ' + x.p.unidad : '') })),
+        conPrecio ? el('span', { class: 'arm-item-sub', text: sub !== null ? pesos(sub) : '—' }) : el('span', { class: 'arm-item-sub' }),
         selector(x.pid, 'arm-ccant-' + x.pid),
         iDet);
     }));
     totalTxt.textContent = items.length ? (completo ? pesos(total) : '—') : pesos(0);
     contador.textContent = String(items.length);
     contador.hidden = !items.length;
-    barraMovil.textContent = items.length ? 'Ver tu pedido · ' + items.length + (items.length === 1 ? ' producto' : ' productos') + ' · ' + totalTxt.textContent : 'Tu pedido está vacío';
-    bEnviar.disabled = !items.length;
+    const etiqueta = opc.titulo || 'Tu pedido';
+    barraMovil.textContent = items.length ? 'Ver ' + etiqueta.toLowerCase() + ' · ' + items.length + (items.length === 1 ? ' producto' : ' productos') + (conPrecio ? ' · ' + totalTxt.textContent : '') : etiqueta + ': vacío';
+    if (!enviando) bEnviar.disabled = !items.length;
   }
 
   bEnviar.addEventListener('click', () => {
@@ -144,7 +159,11 @@ export function armadorPedido(opc) {
       items.push(o);
     }
     if (!items.length) return montar(zona, aviso('error', 'Agregá al menos un producto.', 'DATOS_INCOMPLETOS'));
-    opc.alEnviar(items, zona);
+    const r = opc.alEnviar(items, zona);
+    if (r && typeof r.then === 'function') {
+      enviando = true; bEnviar.disabled = true; bEnviar.textContent = 'Guardando…';
+      Promise.resolve(r).catch(() => {}).finally(() => { enviando = false; bEnviar.textContent = textoEnviar; if (bEnviar.isConnected) actualizar(); });
+    }
   });
 
   pintarCats(); pintarGrilla(); actualizar();

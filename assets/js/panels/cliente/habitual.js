@@ -3,8 +3,10 @@
 // El cliente/repartidor NO crea un habitual desde cero (lo configura Golden); sin habitual puede pedir para una fecha.
 // La fila "ancla" (sin producto, cantidad 0: logística del día) no se muestra. Salida y repartidor NO se muestran ni se envían (los define Golden).
 // El corte y el cierre de producción los aplica el backend.
-import { el, montar, modal, conBloqueo, toast } from '../../ui.js';
-import { leer, catalogo, escribir, cabecera, vacio, DIA_TXT, DIAS, cant, str, textoOk, fmtFecha, raiz, esAncla, editorLineas } from './comun.js';
+import { el, montar, toast } from '../../ui.js';
+import { leer, catalogo, escribir, cabecera, vacio, DIA_TXT, DIAS, cant, str, textoOk, fmtFecha, raiz, esAncla } from './comun.js';
+import { armadorPedido } from './armador.js';
+import { cargarFoto } from './fotos.js';
 
 export function vistaHabitual(ctx, cont) {
   const avisos = el('div', { class: 'stack', id: 'hab-aviso' });
@@ -19,7 +21,7 @@ export function vistaHabitual(ctx, cont) {
     montar(cuerpo,
       el('div', { class: 'hab-dias', 'data-habitual': 'si' }, dias.map(dia => {
         const b = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'editar-dia-habitual', 'data-dia': dia.dia }, 'Editar día');
-        b.addEventListener('click', () => abrirDia(ctx, dia, avisos, cargar));
+        b.addEventListener('click', () => abrirDia(ctx, dia, avisos, cuerpo, cargar));
         return el('div', { class: 'hab-dia', 'data-dia': dia.dia },
           el('div', { class: 'hab-dia-head' }, el('strong', { text: DIA_TXT[dia.dia] || dia.dia }), el('span', { class: 'spacer' }), b),
           dia.lineas.map(l => el('div', { class: 'hab-linea', 'data-recurrente': String(l.pedido_recurrente_id) },
@@ -31,32 +33,34 @@ export function vistaHabitual(ctx, cont) {
   cargar();
 }
 
-async function abrirDia(ctx, dia, avisos, recargar) {
-  const zona = el('div', { class: 'stack', id: 'hd-aviso' });
-  const cuerpo = el('div', { class: 'stack', id: 'hd-form' }, el('div', { class: 'skeleton' }));
-  const m = modal('Editar habitual — ' + (DIA_TXT[dia.dia] || dia.dia), el('div', { class: 'stack' }, cuerpo, zona));
+// Editar un día del habitual con el mismo catálogo + carrito de "Hacer pedido" (armador.js). Se envía la lista completa del día
+// (recurrente/editar_habitual_dia { dia_semana, lineas }): mismas reglas que antes (al menos un producto, cantidades > 0, sin repetidos).
+async function abrirDia(ctx, dia, avisos, cuerpo, recargar) {
+  montar(avisos);
+  montar(cuerpo, el('div', { class: 'card stack' }, el('div', { class: 'skeleton' })));
   const cat = await catalogo(ctx);
   if (!cuerpo.isConnected) return;
-  if (cat.error) return montar(cuerpo, cat.error);
-  const ed = editorLineas(cat.productos, dia.lineas, 'hd');
-  const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-dia' }, 'Guardar día');
-  const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-    el('p', { class: 'muted small', text: 'Es tu habitual completo de los ' + (DIA_TXT[dia.dia] || dia.dia).toLowerCase() + ': podés agregar productos, quitarlos o cambiar cantidades. Se guarda todo junto.' }),
-    ed.nodo,
-    el('p', { class: 'muted small', text: 'Se puede cambiar hasta las 22:00 del día anterior. Si la producción de la próxima fecha ya cerró, el cambio vale desde la siguiente.' }), b);
-  montar(cuerpo, form);
+  if (cat.error) return montar(cuerpo, cat.error, el('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: recargar }, 'Volver'));
+  const nombreDia = (DIA_TXT[dia.dia] || dia.dia).toLowerCase();
   const firma = (ls) => JSON.stringify(ls.map(l => [l.producto_id, l.cantidad, str(l.detalle_libre)]).sort((x, y) => x[0] - y[0]));
-  form.addEventListener('submit', conBloqueo(b, async () => {
-    montar(zona);
-    const l = ed.leer();
-    if (l.error) return montar(zona, el('div', { class: 'notice error', role: 'alert', 'data-codigo': 'DATOS_INCOMPLETOS' }, l.error));
-    if (firma(l.lineas) === firma(dia.lineas)) return montar(zona, el('div', { class: 'notice info', role: 'status' }, 'No hay cambios para guardar.'));
-    await escribir(ctx, zona, 'editar_habitual_dia', { dia_semana: dia.dia, lineas: l.lineas }, async (r) => {
-      m.cerrar();
-      const d = r.datos || {};
-      montar(avisos, el('div', { class: 'notice ok', role: 'status', 'data-codigo': r.codigo }, textoOk(r) + (d.aplica_desde ? ' Vale desde el ' + fmtFecha(d.aplica_desde).toLowerCase() + '.' : ''), el('span', { class: 'code', text: r.codigo })));
-      toast(textoOk(r));
-      await recargar();
-    });
-  }, 'Guardando…'));
+  const arm = armadorPedido({
+    productos: cat.productos, iniciales: dia.lineas.filter(l => Number.isInteger(l.producto_id)),
+    titulo: 'Tu habitual del ' + nombreDia, conservarIniciales: true, textoEnviar: 'Guardar día', idEnviar: 'btn-guardar-dia', idAviso: 'hd-aviso',
+    avisoDia: 'Es tu habitual completo de los ' + nombreDia + ': agregá, quitá o cambiá cantidades. Se puede cambiar hasta las 22:00 del día anterior; si la próxima producción ya cerró, vale desde la siguiente.',
+    cargarFoto: (id) => cargarFoto(ctx, id), alCancelar: recargar,
+    alEnviar: (items, zona) => {
+      if (firma(items) === firma(dia.lineas)) { montar(zona, el('div', { class: 'notice info', role: 'status' }, 'No hay cambios para guardar.')); return null; }
+      return escribir(ctx, zona, 'editar_habitual_dia', { dia_semana: dia.dia, lineas: items }, async (r) => {
+        const d = r.datos || {};
+        montar(avisos, el('div', { class: 'notice ok', role: 'status', 'data-codigo': r.codigo }, textoOk(r) + (d.aplica_desde ? ' Vale desde el ' + fmtFecha(d.aplica_desde).toLowerCase() + '.' : ''), el('span', { class: 'code', text: r.codigo })));
+        toast(textoOk(r));
+        await recargar();
+      });
+    },
+  });
+  montar(cuerpo, el('div', { class: 'stack arm-marco', id: 'hd-form', 'data-dia': dia.dia },
+    el('div', { class: 'arm-intro' }, el('h3', { class: 'arm-titulo', text: 'Editar habitual — ' + (DIA_TXT[dia.dia] || dia.dia) }),
+      el('p', { class: 'muted small', text: 'Elegí los productos y las cantidades de tu habitual de los ' + nombreDia + '.' })),
+    arm.nodo));
+  cuerpo.scrollIntoView({ block: 'start' });
 }

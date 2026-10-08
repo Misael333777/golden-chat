@@ -890,3 +890,9 @@ body:has(.admin-page) .badge-test { display: none; }
 }
 @media (min-width: 900px) and (max-width: 1099px) { .arm-barra-movil { display: none; } }
 @media (prefers-reduced-motion: reduce) { .arm-card, .arm-cat, .arm-btn { transition: none; } }
+
+/* Catálogo + carrito reutilizado en Admin (pedido de una fecha, habitual) y en "Mi habitual": día / salida / repartidor arriba del carrito */
+.arm-logistica { padding-bottom: 10px; border-bottom: 1px dashed var(--line-soft); }
+.arm-logistica .field { margin: 0; }
+.arm-carrito .form-grid.two { gap: 8px; }
+.card .arm-marco { gap: 14px; }
