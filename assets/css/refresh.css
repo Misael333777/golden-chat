@@ -1,0 +1,184 @@
+/* Golden — capa visual aprobada (2026-10-07). Se carga DESPUÉS de components.css.
+   Solo presentación: no oculta datos ni controles funcionales, no depende de lógica y no cambia textos.
+   Para volver al diseño anterior alcanza con quitar el <link> de este archivo en index.html. */
+
+:root {
+  --r-ctl: 12px;
+  --r-card: 16px;
+  --side-bg: #F6EFE0;
+  --side-active: #EADEBF;
+  --side-active-line: #E2D1A5;
+  --side-active-ink: #5D4218;
+  --head-bg: #FBF6EC;
+  --row-hover: #FFF8EA;
+}
+
+/* ---------- cabecera ---------- */
+.topbar { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid rgba(239, 233, 218, .08); }
+.topbar-user { gap: 10px; }
+.topbar-user .who {
+  display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(239, 233, 218, .12);
+}
+.btn-dark { border-radius: var(--radius-pill); border-color: rgba(239, 233, 218, .28); }
+.btn-dark:hover { background: rgba(255, 255, 255, .06); }
+.btn-dark:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+@media (min-width: 900px) { .topbar { position: relative; } }
+
+/* ---------- tarjetas ---------- */
+.card { border-radius: var(--r-card); box-shadow: 0 1px 2px rgba(60, 44, 16, .04); }
+.card h2 { letter-spacing: -0.015em; }
+
+/* ---------- botones ---------- */
+.btn { border-radius: var(--r-ctl); }
+.btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.btn-primary { background: var(--dark-2); }
+.btn-primary:hover:not([disabled]) { background: var(--dark-3); }
+.btn-ghost:hover:not([disabled]) { border-color: var(--gold); background: var(--row-hover); }
+
+/* ---------- formularios ---------- */
+.field label, .field-label { font-weight: 650; font-size: 0.86rem; }
+.input, .select { min-height: 46px; border-radius: var(--r-ctl); }
+.input:hover:not(:focus), .select:hover:not(:focus) { border-color: #D9C38E; }
+.input[aria-invalid="true"] { border-color: var(--bad); }
+textarea.input { min-height: 96px; padding-top: 12px; padding-bottom: 12px; line-height: 1.5; }
+.search-field .input, #btn-buscar { min-height: 48px; border-radius: var(--r-ctl); }
+.cat-filtros .select, .ped-filtros .select, .his-filtros .input[type="date"], .rep-filtros .input { min-height: 48px; border-radius: var(--r-ctl); }
+fieldset.grupo { border-radius: var(--r-ctl); background: #FFFCF6; }
+
+/* ---------- chips ---------- */
+.chip { border-radius: var(--radius-pill); padding: 4px 12px; font-size: 0.78rem; font-weight: 650; }
+
+/* =====================================================================
+   MARCO DE PANELES (Cliente, Repartidor, Admin General, Admin Finanzas)
+   ===================================================================== */
+
+/* Celular y tablet: el menú de secciones queda como barra de pestañas fija debajo de la cabecera. */
+@media (max-width: 899px) {
+  .admin-layout { gap: 14px; }
+  .side {
+    position: sticky; top: var(--topbar-h, 64px); z-index: 20; gap: 8px;
+    margin: -28px calc(var(--gutter) * -1) 0; padding: 12px var(--gutter) 10px;
+    background: rgba(253, 248, 238, .96); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .side-head h1 { font-size: 1.2rem; }
+  .side-crown { width: 24px; height: 24px; }
+  .side-menu { gap: 6px; padding: 2px 0 4px; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .side-menu::-webkit-scrollbar { display: none; }
+  .menu-item {
+    scroll-snap-align: start; gap: 8px; min-height: 40px; padding: 0 14px; border-radius: var(--radius-pill);
+    font-size: 0.88rem; font-weight: 600; background: var(--white);
+  }
+  .menu-ico { width: 18px; height: 18px; }
+  .menu-item.active { background: var(--dark-2); border-color: var(--dark-2); color: var(--white); }
+  .menu-item.active .menu-ico { background: var(--gold-light); }
+  .menu-item:focus-visible { outline: none; box-shadow: var(--ring); }
+}
+/* En celular la cabecera ocupa dos filas: la barra de secciones se acomoda debajo. */
+@media (max-width: 560px) { .side { --topbar-h: 112px; } }
+
+/* Escritorio: columna lateral con indicador dorado en la sección activa. */
+@media (min-width: 900px) {
+  .admin-layout { grid-template-columns: 256px minmax(0, 1fr); }
+  .side { background: var(--side-bg); padding: 26px 14px 24px; }
+  .side-head { padding: 0 12px 18px; margin-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+  .side-head h1 { font-size: 1.35rem; }
+  .side-menu { gap: 2px; }
+  .menu-item {
+    position: relative; min-height: 42px; padding: 9px 12px; border-radius: 10px;
+    font-size: 0.92rem; font-weight: 550; color: #3E372A; border: 1px solid transparent;
+  }
+  .menu-ico { width: 20px; height: 20px; background: #8A7D63; }
+  .menu-item:hover { background: #EDE4D2; }
+  .menu-item.active { background: var(--side-active); border-color: var(--side-active-line); color: var(--side-active-ink); font-weight: 700; }
+  .menu-item.active::before { content: ''; position: absolute; left: -14px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--gold); }
+  .menu-item.active .menu-ico { background: var(--gold-deep); }
+  .menu-item:focus-visible { outline: none; box-shadow: var(--ring); }
+  .admin-body { padding: 32px 36px 44px; }
+}
+@media (min-width: 1200px) { .admin-body { padding: 36px 44px 48px; } }
+
+/* ---------- encabezados ---------- */
+.section-title { font-size: clamp(1.7rem, 3.6vw, 2.25rem); }
+.card-welcome { border-radius: 20px; border-color: var(--line); }
+.card-welcome h2 { font-size: clamp(1.7rem, 3.2vw, 2.25rem); }
+
+/* ---------- atajos de inicio ---------- */
+.shortcut-grid { gap: 12px; }
+.shortcut { border-radius: var(--r-card); padding: 18px; gap: 6px; height: 100%; transition: border-color .15s, box-shadow .15s, transform .15s var(--ease); }
+.shortcut:hover { border-color: var(--line); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.shortcut:focus-within { border-color: var(--gold); }
+.shortcut .btn { margin-top: auto; }
+.shortcut-ico { width: 44px; height: 44px; border-radius: 12px; }
+.shortcut-ico::after { inset: 12px; }
+
+/* ---------- indicadores ---------- */
+.prd-tiles { gap: 12px; }
+.precio-tile { border-radius: 14px; background: var(--white); box-shadow: 0 1px 2px rgba(60, 44, 16, .04); }
+.prd-tile { padding: 14px 16px; }
+.precio-label { font-size: 0.72rem; letter-spacing: .12em; }
+.prd-tile-alerta { background: #FDF1EF; }
+
+/* ---------- tablas y listas ---------- */
+.tabla { border-radius: var(--r-card); box-shadow: 0 1px 2px rgba(60, 44, 16, .04); }
+.person-card { transition: background .12s; }
+.person-card:hover, .person-card:focus-visible { background: var(--row-hover); }
+.person-card:focus-visible { outline: none; box-shadow: inset 3px 0 0 var(--gold); }
+@media (min-width: 768px) {
+  .tabla-head { background: var(--head-bg); font-size: 0.72rem !important; font-weight: 700 !important; letter-spacing: .08em; text-transform: uppercase; color: #8A7D63 !important; }
+  .person-card { min-height: 62px; }
+}
+.ext-lineas, .pp-lineas, .rep-tabla { border-radius: var(--r-ctl); }
+@media (min-width: 760px) {
+  .rep-head, .ext-linea-head { background: var(--head-bg); text-transform: uppercase; letter-spacing: .08em; font-size: 0.72rem !important; font-weight: 700 !important; color: #8A7D63 !important; }
+}
+
+/* ---------- fichas ---------- */
+#admin-contenido:has(#ficha), #admin-contenido:has(#prod-ficha), #admin-contenido:has(#ped-ficha) { border-radius: 20px; padding: 22px; }
+@media (max-width: 560px) {
+  #admin-contenido:has(#ficha), #admin-contenido:has(#prod-ficha), #admin-contenido:has(#ped-ficha) { padding: 16px; border-radius: 16px; }
+}
+.gld-box { border-radius: var(--r-ctl); }
+
+/* ---------- avisos, vacíos y modales ---------- */
+.notice, .toast { border-radius: var(--r-ctl); }
+.modal { border-radius: 20px; }
+.modal-backdrop { background: rgba(20, 18, 16, .45); }
+@media (max-width: 639px) {
+  .modal-backdrop { padding: 0; }
+  .modal { max-height: 92vh; border-radius: 20px 20px 0 0; }
+}
+
+/* =====================================================================
+   HACER PEDIDO (Cliente / Repartidor)
+   ===================================================================== */
+.arm-intro { border-radius: 20px; padding: 20px 24px; }
+.arm-card { border-radius: var(--r-card); padding: 8px 8px 12px; }
+.arm-card:hover { border-color: var(--line); }
+.arm-foto { border-radius: 12px; }
+.arm-carrito { border-radius: 20px; }
+.arm-item { border-radius: var(--r-ctl); }
+.arm-barra-movil { bottom: max(12px, env(safe-area-inset-bottom)); background: var(--dark-2); }
+.arm-barra-movil:focus-visible { outline: none; box-shadow: var(--ring), var(--shadow-lift); }
+
+/* =====================================================================
+   INICIO PÚBLICO, INGRESO y SELECTOR DE PANEL
+   ===================================================================== */
+body.es-inicio .topbar { position: relative; }
+.ini-card { border-radius: 22px; }
+.ini-tab:focus-visible { outline: none; box-shadow: var(--ring); }
+.ini-form .input { border-radius: var(--r-ctl); }
+@media (max-width: 599px) {
+  .ini-grid { padding: 32px var(--gutter) 40px; gap: 26px; }
+  .ini-card { padding: 30px 20px 26px; border-radius: 20px; }
+  .ini-logo { width: 180px; margin-bottom: 20px; }
+}
+.panel-card { border-radius: var(--r-card); transition: border-color .15s, box-shadow .15s, transform .15s var(--ease); }
+.panel-card:hover:not([disabled]) { box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.panel-card:focus-visible { outline: none; box-shadow: var(--ring); }
+
+@media (prefers-reduced-motion: reduce) {
+  .shortcut, .panel-card, .person-card { transition: none; }
+  .shortcut:hover, .panel-card:hover:not([disabled]) { transform: none; }
+}
