@@ -756,23 +756,61 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     const diasConLinea = d.dias.map(x => x.dia);
     const bAgregar = persona && diasConLinea.length < 7 ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-agregar-dia', onclick: () => abrirHabitual(z, 'agregar_dia', diasConLinea, recargar) }, 'Agregar día') : null;
     const dias = d.dias.slice().sort((a, b) => DIAS.indexOf(a.dia) - DIAS.indexOf(b.dia));
-    montar(z, head(bAgregar),
+    // 2026-10-08: cancelar = editar_habitual_dia con lista vacía (queda la fila ancla con salida/repartidor; no entra en producción).
+    const conProductos = dias.filter(x => x.lineas.some(l => !esAncla(l))).map(x => x.dia);
+    const bCancelar = persona && conProductos.length ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-cancelar-habitual', 'data-accion': 'cancelar-habitual' }, 'Cancelar habitual') : null;
+    if (bCancelar) {
+      const correr = conBloqueo(bCancelar, () => quitarDias(conProductos, recargar), 'Cancelando…');
+      bCancelar.addEventListener('click', async () => {
+        if (await confirmar('Cancelar habitual', '¿Cancelar el habitual de ' + (persona.nombre || pid) + ' en todos los días (' + conProductos.map(x => (DIA_TXT[x] || x).toLowerCase()).join(', ') + ')? Vale desde la próxima producción abierta. Se conservan salida y repartidor por si se vuelve a armar.', 'Cancelar habitual')) await correr();
+      });
+    }
+    montar(z, head(el('span', { class: 'row' }, bAgregar, bCancelar)),
       el('div', { class: 'hab-dias', 'data-habitual': 'si' }, dias.map(dia => {
         const productos = dia.lineas.filter(l => !esAncla(l));
         const log = logisticaDia(dia.lineas);
         const b = persona ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'editar-dia-habitual', 'data-dia': dia.dia }, 'Editar día') : null;
         if (b) b.addEventListener('click', () => abrirDia(z, dia.dia, productos, log, recargar));
+        const bQ = persona && productos.length ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'quitar-dia-habitual', 'data-dia': dia.dia }, 'Quitar día') : null;
+        if (bQ) {
+          const nd = (DIA_TXT[dia.dia] || dia.dia).toLowerCase();
+          const correr = conBloqueo(bQ, () => quitarDias([dia.dia], recargar), 'Quitando…');
+          bQ.addEventListener('click', async () => {
+            if (await confirmar('Quitar el ' + nd, '¿Quitar el habitual de los ' + nd + ' de ' + (persona.nombre || pid) + '? Los demás días no cambian. Vale desde la próxima producción abierta.', 'Quitar día')) await correr();
+          });
+        }
         return el('div', { class: 'hab-dia', 'data-dia': dia.dia },
           el('div', { class: 'hab-dia-head' }, el('strong', { text: DIA_TXT[dia.dia] || dia.dia }),
             el('span', { class: 'chips' }, el('span', { class: 'chip', 'data-salida': log.salida || '', text: salidaTxt(log.salida) }),
               el('span', { class: 'chip', 'data-repartidor': log.repartidor_persona_id || '', text: log.repartidor_persona_id ? nombreDe(apoyo, log.repartidor_persona_id) : 'Sin repartidor' }),
-              productos.length ? null : el('span', { class: 'chip warn', 'data-ancla': 'true', text: 'Solo logística' })),
-            el('span', { class: 'spacer' }), b),
+              productos.length ? null : el('span', { class: 'chip warn', 'data-ancla': 'true', text: 'Sin productos · no entra en producción' })),
+            el('span', { class: 'spacer' }), el('span', { class: 'row' }, b, bQ)),
           productos.map(l => el('div', { class: 'hab-linea', 'data-recurrente': String(l.pedido_recurrente_id) },
             el('span', { class: 'hab-prod' }, el('span', { text: (str(l.producto) || str(l.detalle_libre) || 'Producto') + ' · ' + cant(l.cantidad, l.unidad) }),
               str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null))));
       })),
       el('p', { class: 'muted small', text: 'Los cambios del habitual no se pueden hacer mientras se cierra la producción (desde las 22:00 hasta el cierre). Las fechas ya cerradas no cambian.' }));
+  }
+  // Quitar días del habitual (uno o todos): editar_habitual_dia con lista vacía, de a un día. Si uno falla se frena y se avisa.
+  async function quitarDias(lista, recargar) {
+    montar(avisos);
+    const zona = el('div', { class: 'stack', id: 'hab-cancelar-aviso' });
+    montar(avisos, zona);
+    const hechos = [];
+    for (const d of lista) {
+      const r = await escribir(ctx, zona, 'editar_habitual_dia', { persona_id: pid, dia_semana: d, lineas: [] }, async () => {});
+      if (!r || !r.success) {
+        if (hechos.length) avisos.insertBefore(aviso('ok', 'Se quitaron: ' + hechos.map(x => (DIA_TXT[x] || x).toLowerCase()).join(', ') + '.'), zona);
+        return false;
+      }
+      hechos.push(d);
+    }
+    const txt = lista.length > 1 ? 'Habitual cancelado.' : 'Se quitó el habitual de los ' + (DIA_TXT[lista[0]] || lista[0]).toLowerCase() + '.';
+    await recargar();
+    const zP = document.getElementById('pp-pedido'); if (zP) cargarPedido(zP); // el pedido de la fecha puede venir del habitual
+    montar(avisos, aviso('ok', txt + ' Vale desde la próxima producción abierta.', 'HABITUAL_CANCELADO'));
+    toast(txt);
+    return true;
   }
   // Selects de logística (salida / repartidor) con las mismas opciones de siempre.
   function selectSalida(id, actual) {
