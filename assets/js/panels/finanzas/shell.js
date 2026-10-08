@@ -1,7 +1,8 @@
-// Panel Admin Finanzas. Mismo marco visual que Admin General. Las 11 secciones tienen backend real (Web API PROD →
+// Panel Admin Finanzas. Mismo marco visual que Admin General (assets/js/marco.js). Las 11 secciones tienen backend real (Web API PROD →
 // Consultas / Escrituras PROD). Escrituras: previsualizar → confirmar → registrar, con operacion_id idempotente y reintento seguro.
 import { el, montar, conBloqueo } from '../../ui.js';
 import * as ops from '../../ops.js';
+import { marco } from '../../marco.js';
 import { TIPO, avisoFin } from './comun.js';
 import { vistaInicio } from './inicio.js';
 import { vistaCuentas } from './cuentas.js';
@@ -19,20 +20,29 @@ const MENU = [
   { id: 'movimientos', txt: 'Movimientos' }, { id: 'pendientes', txt: 'Pendientes' }, { id: 'configuracion', txt: 'Configuración' },
 ];
 
+// Presentación del menú (ícono y subtítulo) para el marco compartido. No cambia secciones ni rutas.
+const PRESENTACION = {
+  inicio: { ico: 'inicio', sub: 'Resumen del día', corto: 'Inicio', tab: true },
+  cuentas: { ico: 'banco', sub: 'Bancos y cajas' },
+  cobros: { ico: 'entrada', sub: 'Lo que ingresa', corto: 'Cobros', tab: true },
+  gastos: { ico: 'salida', sub: 'Lo que sale', corto: 'Gastos', tab: true },
+  transferencias: { ico: 'cambiar', sub: 'Entre cuentas' },
+  cobrar: { ico: 'personas', sub: 'Saldos de clientes', corto: 'Cobrar', tab: true },
+  pagar: { ico: 'documento', sub: 'Deudas y sueldos' },
+  extras: { ico: 'mas', sub: 'Cargos de extras' },
+  movimientos: { ico: 'pedidos', sub: 'Historial de dinero' },
+  pendientes: { ico: 'alerta', sub: 'Revisiones abiertas' },
+  configuracion: { ico: 'ajustes', sub: 'Ajustes de finanzas' },
+};
+
 export function vistaFinanzas(ctx, partes) {
   const sec = partes[0] || 'inicio';
   if (!MENU.some(m => m.id === sec)) return ctx.ir('#/finanzas/inicio');
-  const itemMenu = (m) => el('a', { class: 'menu-item' + (m.id === sec ? ' active' : ''), href: '#/finanzas/' + m.id,
-    'aria-current': m.id === sec ? 'page' : null, 'data-menu': 'fin-' + m.id },
-    el('span', { class: 'menu-ico', 'aria-hidden': 'true' }), el('span', { class: 'menu-txt', text: m.txt }));
+  const nav = MENU.map(m => Object.assign({}, m, PRESENTACION[m.id]));
   const avisos = el('div', { class: 'stack', id: 'fin-pendientes-ops' });
   const contenido = el('section', { class: 'stack', id: 'finanzas-contenido' });
-  const lateral = el('aside', { class: 'side' },
-    el('div', { class: 'side-head' }, el('span', { class: 'side-crown', 'aria-hidden': 'true' }), el('h1', { text: 'Admin Finanzas' })),
-    el('nav', { class: 'side-menu', 'aria-label': 'Menú Admin Finanzas' }, MENU.map(itemMenu)),
-    el('span', { class: 'side-art', 'aria-hidden': 'true' }),
-    el('p', { class: 'side-script', 'aria-hidden': 'true' }, 'Panadería', el('br'), 'en buenas manos.'));
-  montar(ctx.app, el('div', { class: 'stack admin-page finanzas-page' }, el('div', { class: 'admin-layout' }, lateral, el('div', { class: 'stack admin-body' }, avisos, contenido))));
+  marco(ctx, { panel: 'finanzas', base: '#/finanzas', nav, grupo: nav.find(m => m.id === sec), sec, prefijo: 'fin-', zonas: [avisos], contenido,
+    etiqueta: 'Admin Finanzas', rolTxt: 'Admin Finanzas', ariaMenu: 'Menú Admin Finanzas', extraClase: 'admin-page finanzas-page', pie: 'Las cuentas claras de Golden.' });
   pintarPendientes(ctx, avisos);
   if (ctx.flash) { const f = ctx.flash; ctx.flash = null; if (f.r) avisos.appendChild(avisoFin(f.r)); }
   const resto = partes.slice(1);

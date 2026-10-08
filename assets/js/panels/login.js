@@ -1,5 +1,5 @@
 // Inicio público de Golden: "Ingresar" (código GLD, lógica de ingreso SIN cambios) | "Registrarme" (solicitud de alta, tipo 'registro').
-// Diseño aprobado 2026-10-02: foto de flautas de fondo, título a la izquierda, una sola tarjeta con dos estados. No muestra distintivo de entorno.
+// Diseño de la maqueta aprobada: foto a la izquierda con el título, tarjeta de ingreso a la derecha (una sola tarjeta con dos estados). No muestra distintivo de entorno.
 // El registro solo manda nombre y teléfono; la Web API valida, normaliza, limita envíos y nunca devuelve datos internos.
 // Reintentar es seguro: el backend reconoce la misma solicitud por teléfono y no la duplica.
 import { llamar, TEXTO_FALLA } from '../api.js';
@@ -8,7 +8,7 @@ import { el, montar, aviso, avisoBackend, conBloqueo } from '../ui.js';
 const MSJ_REGISTRO_OK = '¡Gracias! Estamos revisando tu solicitud.';
 
 export function vistaLogin(ctx, avisoPrevio) {
-  document.body.classList.add('es-inicio');
+  document.body.classList.add('es-inicio', 'cg-activo');
 
   // --- Ingresar (misma lógica que antes) ---
   const input = el('input', { class: 'input', id: 'gld', name: 'codigo', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false',
@@ -79,18 +79,26 @@ export function vistaLogin(ctx, avisoPrevio) {
   tIng.addEventListener('click', () => elegir('ingresar', true));
   tReg.addEventListener('click', () => elegir('registro', true));
 
-  const card = el('div', { class: 'ini-card', id: 'ini-card' },
+  const card = el('div', { class: 'ini-card cgi-card', id: 'ini-card' },
     el('img', { class: 'ini-logo', src: 'assets/img/logo.png', alt: 'Golden' }),
+    el('div', { class: 'cgi-card-head' }, el('span', { class: 'cg-eyebrow', text: 'Tu cuenta Golden' }), el('h2', { text: 'Entrá a tu panel' }),
+      el('p', { text: 'Ingresá con tu código GLD. Si todavía no tenés uno, pedí tu alta.' })),
     el('div', { class: 'ini-tabs', role: 'tablist', 'aria-label': 'Ingresar o registrarme' }, tIng, tReg),
     el('span', { class: 'ini-sep', 'aria-hidden': 'true' }),
     form, formReg);
 
-  const izquierda = el('div', { class: 'ini-hero' },
-    el('h1', { class: 'ini-title' }, el('span', { class: 'ini-title-a', text: 'Bienvenido a' }), el('span', { class: 'ini-title-b', text: 'Golden' })),
-    el('span', { class: 'ini-line', 'aria-hidden': 'true' }),
-    el('p', { class: 'ini-sub', text: 'Tu panificadora de confianza.' }));
+  const izquierda = el('div', { class: 'ini-hero cgi-hero' },
+    el('img', { class: 'cgi-foto', src: 'assets/img/inicio-flautas.jpg', alt: '' }),
+    el('div', { class: 'cgi-hero-txt' },
+      el('img', { class: 'cgi-hero-logo', src: 'assets/img/logo-claro.png', alt: '' }),
+      el('span', { class: 'cg-eyebrow', text: 'Panadería en buenas manos' }),
+      el('h1', { class: 'ini-title' }, el('span', { class: 'ini-title-a', text: 'Bienvenido a' }), el('span', { class: 'ini-title-b', text: 'Golden' })),
+      el('span', { class: 'ini-line', 'aria-hidden': 'true' }),
+      el('p', { class: 'ini-sub', text: 'Tu panificadora de confianza.' })),
+    el('div', { class: 'cgi-sello', 'aria-hidden': 'true' }, el('strong', { text: 'Lo de cada día' }), el('span', { text: 'Hecho con dedicación' })));
 
-  montar(ctx.app, el('div', { class: 'ini', id: 'inicio' }, el('div', { class: 'ini-grid' }, izquierda, card)));
+  montar(ctx.app, el('div', { class: 'ini cgi', id: 'inicio' }, el('div', { class: 'ini-grid cgi-grid' }, izquierda,
+    el('div', { class: 'cgi-lado' }, card, el('p', { class: 'cgi-pie', text: 'Golden. Panadería en buenas manos.' })))));
   elegir('ingresar', false);
   input.focus();
 }

@@ -2,6 +2,8 @@
 import { el, montar, avisoBackend, aviso, conBloqueo, textoRol } from '../../ui.js';
 import { TEXTO_FALLA } from '../../api.js';
 import * as ops from '../../ops.js';
+import { marco } from '../../marco.js';
+import { icono } from '../cliente/iconos.js';
 import { vistaPersonas, vistaFicha } from './personas.js';
 import { vistaCatalogo, vistaProducto } from './catalogo.js';
 import { vistaPedidos, vistaPersonaPedido } from './pedidos.js';
@@ -23,6 +25,19 @@ const MENU = [
   { id: 'reportes', txt: 'Reportes', activo: true },
   { id: 'configuracion', txt: 'Configuración', activo: true },
 ];
+// Presentación del menú (ícono, subtítulo y descripción). No cambia qué secciones existen ni sus rutas.
+const PRESENTACION = {
+  inicio: { ico: 'inicio', sub: 'Resumen y accesos', corto: 'Inicio', tab: true },
+  clientes: { ico: 'personas', sub: 'Altas, precios y acceso', corto: 'Clientes', tab: true, desc: 'Altas, datos, lista de precio, roles y acceso.' },
+  repartidores: { ico: 'camion', sub: 'Altas y acceso', desc: 'Altas, datos, roles y acceso.' },
+  catalogo: { ico: 'caja', sub: 'Productos y precios', desc: 'Productos, precios por lista y visibilidad por rol.' },
+  pedidos: { ico: 'pedido', sub: 'Fecha, habituales y extras', corto: 'Pedidos', tab: true, dia: true, desc: 'Pedidos por fecha, habituales y extras.' },
+  produccion: { ico: 'produccion', sub: 'Planilla del día', corto: 'Producción', tab: true, dia: true, desc: 'Planilla por fecha, líneas manuales y aclaraciones.' },
+  pendientes: { ico: 'alerta', sub: 'Lo que requiere atención', dia: true, desc: 'Lo que necesita intervención.' },
+  historial: { ico: 'reloj', sub: 'Quién hizo qué', desc: 'Quién hizo qué y cuándo.' },
+  reportes: { ico: 'grafico', sub: 'Resúmenes por período', desc: 'Resúmenes por período.' },
+  configuracion: { ico: 'ajustes', sub: 'Datos generales', desc: 'Datos generales de Golden y Admin Finanzas.' },
+};
 export const SECCIONES = {
   clientes: { id: 'clientes', titulo: 'Clientes', rol: 'cliente', singular: 'cliente' },
   repartidores: { id: 'repartidores', titulo: 'Repartidores', rol: 'repartidor', singular: 'repartidor' },
@@ -34,22 +49,13 @@ export function vistaAdmin(ctx, partes) {
   const sec = partes[0] || 'inicio';
   const item = MENU.find(m => m.id === sec);
   if (!item) return ctx.ir('#/admin/inicio');
-  // Presentación: mismo MENU y mismo orden, en una sola lista. Los no habilitados conservan la marca "Pronto".
-  const itemMenu = (m) => el('a', { class: 'menu-item' + (m.id === sec ? ' active' : '') + (m.activo ? '' : ' off'), href: '#/admin/' + m.id,
-    'aria-current': m.id === sec ? 'page' : null, 'data-menu': m.id },
-    el('span', { class: 'menu-ico', 'aria-hidden': 'true' }), el('span', { class: 'menu-txt', text: m.txt }), m.activo ? null : el('span', { class: 'tag-off', text: 'Pronto' }));
-  const menu = el('nav', { class: 'side-menu', 'aria-label': 'Menú Admin General' }, MENU.map(itemMenu));
+  // Presentación: mismo MENU y mismo orden, en el marco compartido de la maqueta aprobada (assets/js/marco.js).
+  const nav = MENU.map(m => Object.assign({}, m, PRESENTACION[m.id]));
   const contenido = el('section', { class: 'stack', id: 'admin-contenido' });
   const zonaFlash = el('div', { class: 'stack', id: 'admin-flash' });
   const zonaPend = el('div', { class: 'stack', id: 'pendientes' });
-  // Presentación: el título del panel encabeza la columna lateral (estilo marco de aplicación).
-  const lateral = el('aside', { class: 'side' },
-    el('div', { class: 'side-head' }, el('span', { class: 'side-crown', 'aria-hidden': 'true' }), el('h1', { text: 'Admin General' })),
-    menu,
-    el('span', { class: 'side-art', 'aria-hidden': 'true' }),
-    el('p', { class: 'side-script', 'aria-hidden': 'true' }, 'Panadería', el('br'), 'en buenas manos.'));
-  montar(ctx.app, el('div', { class: 'stack admin-page' },
-    el('div', { class: 'admin-layout' }, lateral, el('div', { class: 'stack admin-body' }, zonaFlash, zonaPend, contenido))));
+  marco(ctx, { panel: 'admin', base: '#/admin', nav, grupo: nav.find(m => m.id === sec), sec, prefijo: '', zonas: [zonaFlash, zonaPend], contenido,
+    etiqueta: 'Admin General', rolTxt: 'Admin General', ariaMenu: 'Menú Admin General', extraClase: 'admin-page', pie: 'Gestión diaria de Golden.' });
   if (ctx.flash) { montar(zonaFlash, ctx.flash.r ? avisoBackend(ctx.flash.r) : aviso('error', TEXTO_FALLA[ctx.flash.falla] || 'No se pudo completar.', 'FALLA_' + ctx.flash.falla)); ctx.flash = null; }
   pintarPendientes(ctx, zonaPend);
   const off = ops.suscribir(() => { if (!zonaPend.isConnected) return off(); pintarPendientes(ctx, zonaPend); });
@@ -60,25 +66,21 @@ export function vistaAdmin(ctx, partes) {
       el('h2', { text: item.txt }), el('p', { text: 'Todavía no disponible.' })));
   }
   if (sec === 'inicio') {
-    const atajo = (id, titulo, texto, boton, clase) => el('div', { class: 'shortcut', 'data-atajo': id },
-      el('span', { class: 'shortcut-ico', 'aria-hidden': 'true' }),
-      el('h3', { text: titulo }), el('p', { class: 'muted small', text: texto }),
-      el('a', { class: 'btn ' + clase, href: '#/admin/' + id }, boton));
-    return montar(contenido, el('div', { class: 'card stack card-welcome' },
-      el('div', null,
-        el('span', { class: 'eyebrow', text: 'Bienvenida' }),
-        el('h2', { text: 'Inicio' }),
-        el('p', { class: 'muted', text: 'Todas las secciones de Admin General están habilitadas.' })),
-      el('div', { class: 'shortcut-grid' },
-        atajo('clientes', 'Clientes', 'Altas, datos, lista de precio, roles y acceso.', 'Ir a Clientes', 'btn-primary'),
-        atajo('repartidores', 'Repartidores', 'Altas, datos, roles y acceso.', 'Ir a Repartidores', 'btn-ghost'),
-        atajo('catalogo', 'Catálogo', 'Productos, precios por lista y visibilidad por rol.', 'Ir a Catálogo', 'btn-ghost'),
-        atajo('pedidos', 'Pedidos', 'Pedidos por fecha, habituales y extras.', 'Ir a Pedidos', 'btn-ghost'),
-        atajo('produccion', 'Producción', 'Planilla por fecha, líneas manuales y aclaraciones.', 'Ir a Producción', 'btn-ghost'),
-        atajo('pendientes', 'Pendientes', 'Lo que necesita intervención.', 'Ir a Pendientes', 'btn-ghost'),
-        atajo('historial', 'Historial', 'Quién hizo qué y cuándo.', 'Ir a Historial', 'btn-ghost'),
-        atajo('reportes', 'Reportes', 'Resúmenes por período.', 'Ir a Reportes', 'btn-ghost'),
-        atajo('configuracion', 'Configuración', 'Datos generales de Golden y Admin Finanzas.', 'Ir a Configuración', 'btn-ghost'))));
+    const nombre = ((ctx.sesion && ctx.sesion().nombre) || '').split(' ')[0];
+    const hoy = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Argentina/Buenos_Aires' });
+    const atajo = (m, clase) => el('a', { class: 'cg-accion' + (clase ? ' ' + clase : ''), href: '#/admin/' + m.id, 'data-atajo': m.id },
+      el('span', { class: 'cg-accion-ico' }, icono(m.ico, 20)),
+      el('span', { class: 'cg-accion-txt' }, el('strong', { text: m.txt }), el('small', { text: m.desc })), icono('chevron', 16));
+    const otros = nav.filter(m => m.id !== 'inicio');
+    return montar(contenido, el('div', { class: 'cg-home' },
+      el('div', { class: 'cg-encabezado' },
+        el('div', null, el('span', { class: 'cg-eyebrow', text: 'Admin General' }), el('h1', { text: nombre ? 'Hola, ' + nombre + '.' : 'Hola.' }),
+          el('p', { text: 'Todas las secciones de Admin General están habilitadas.' })),
+        el('div', { class: 'cg-hoy' }, hoy, el('small', { text: 'Hora de Argentina' }))),
+      el('div', { class: 'cg-titulo-seccion' }, el('h2', { text: 'Lo del día' }), el('span', { text: 'Accesos rápidos' })),
+      el('div', { class: 'cg-acciones' }, otros.filter(m => m.dia).map(m => atajo(m, 'cg-accion-dia'))),
+      el('div', { class: 'cg-titulo-seccion' }, el('h2', { text: 'Gestión' }), el('span', { text: 'Personas, catálogo y datos' })),
+      el('div', { class: 'cg-acciones' }, otros.filter(m => !m.dia).map(m => atajo(m)))));
   }
   if (sec === 'pedidos') return partes[1] === 'persona' ? vistaPersonaPedido(ctx, contenido, decodeURIComponent(partes[2] || ''), partes[3] || '') : vistaPedidos(ctx, contenido, partes[1]);
   if (sec === 'produccion') return vistaProduccion(ctx, contenido, partes[1] || '');
