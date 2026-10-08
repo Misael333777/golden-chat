@@ -1,4 +1,4 @@
-// Íconos del panel Cliente (trazos estilo lucide). Se arman con createElementNS: nunca se inserta HTML.
+// Íconos de todos los paneles (trazos estilo lucide). Se arman con createElementNS: nunca se inserta HTML.
 const NS = 'http://www.w3.org/2000/svg';
 const TRAZOS = {
   inicio: ['M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'],
@@ -18,6 +18,20 @@ const TRAZOS = {
   trigo: ['M12 21V9', 'M12 13c-3 0-4-2-4-4 3 0 4 2 4 4z', 'M12 13c3 0 4-2 4-4-3 0-4 2-4 4z', 'M12 9c-2.5 0-3.5-2-3.5-3.5C11 5.5 12 7.5 12 9z', 'M12 9c2.5 0 3.5-2 3.5-3.5C13 5.5 12 7.5 12 9z'],
   persona: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5'],
   etiqueta: ['M3 12V4h8l10 10-8 8z', 'M7.5 8.5h.01'],
+  personas: ['M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M2 21c0-3.5 3-6 7-6s7 2.5 7 6', 'M16 3.5a4 4 0 0 1 0 7', 'M22 21c0-3-2-5.2-5-5.8'],
+  camion: ['M2 6h12v10H2z', 'M14 9h4l3 3.5V16h-7', 'M6.5 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', 'M17.5 19.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
+  caja: ['M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z', 'M3 7.5 12 12l9-4.5', 'M12 12v9'],
+  produccion: ['M6 13.5a4 4 0 0 1 1.3-7.8 5 5 0 0 1 9.4 0A4 4 0 0 1 18 13.5V20H6z', 'M6 16.5h12'],
+  alerta: ['M12 3.5 2.5 20h19z', 'M12 10v4', 'M12 17h.01'],
+  grafico: ['M3 20h18', 'M6 16v-5', 'M11 16V6', 'M16 16V9', 'M21 16v-3'],
+  ajustes: ['M4 6h9', 'M17 6h3', 'M15 4v4', 'M4 12h3', 'M11 12h9', 'M9 10v4', 'M4 18h11', 'M19 18h1', 'M17 16v4'],
+  banco: ['M3 10l9-6 9 6', 'M5 10v8', 'M9.5 10v8', 'M14.5 10v8', 'M19 10v8', 'M3 20.5h18'],
+  entrada: ['M12 4v11', 'M7 10.5l5 5 5-5', 'M5 20h14'],
+  salida: ['M12 20V9', 'M7 13.5l5-5 5 5', 'M5 4h14'],
+  documento: ['M6 3h9l4 4v14H6z', 'M15 3v4h4', 'M9 12h7', 'M9 16h7'],
+  menu: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
+  cerrar: ['M6 6l12 12', 'M18 6 6 18'],
+  llave: ['M8 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M11 11h10', 'M18 11v3', 'M21 11v2'],
 };
 export function icono(nombre, tam) {
   const s = document.createElementNS(NS, 'svg');

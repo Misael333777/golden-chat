@@ -71,7 +71,7 @@ async function render() {
   const ruta = (location.hash || '#/').replace(/^#/, '');
   const partes = ruta.split('/').filter(Boolean);
   const d = sesion.datos();
-  document.body.classList.remove('es-inicio', 'cg-activo'); // solo el inicio público la vuelve a poner (cabecera sin distintivo, con Panadería · Pedidos · Gestión)
+  document.body.classList.remove('es-inicio', 'cg-activo', 'cg-menu-abierto'); // solo el inicio público la vuelve a poner (cabecera sin distintivo, con Panadería · Pedidos · Gestión)
   cabecera();
   if (!sesion.token()) {
     const a = avisoLogin; avisoLogin = null;
