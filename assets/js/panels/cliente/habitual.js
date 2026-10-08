@@ -2,9 +2,11 @@
 // Etapa 4: el día habitual se edita COMPLETO (varios productos): agregar, quitar y cambiar cantidades; se envía la lista entera del día.
 // 2026-10-08: el cliente/repartidor ARMA su habitual (sin habitual: "Armar mi habitual") y AGREGA días libres ("Agregar un día"), sin aprobación.
 //   Solo elige día y productos; la salida y el repartidor los asigna Admin General (el backend copia los de sus otros días o los deja sin asignar).
+// 2026-10-08: "Quitar día" y "Dejar de recibir mi habitual" = editar_habitual_dia con lista vacía (el backend deja la fila ancla con la logística,
+//   que no se muestra ni entra en producción; si vuelve a armar ese día, recupera la salida/repartidor que tenía).
 // La fila "ancla" (sin producto, cantidad 0: logística del día) no se muestra. Salida y repartidor NO se muestran ni se envían (los define Golden).
 // El corte y el cierre de producción los aplica el backend.
-import { el, montar, toast } from '../../ui.js';
+import { el, montar, toast, confirmar, conBloqueo } from '../../ui.js';
 import { leer, catalogo, escribir, cabecera, vacio, DIA_TXT, DIAS, cant, str, textoOk, fmtFecha, raiz, esAncla } from './comun.js';
 import { armadorPedido } from './armador.js';
 import { cargarFoto } from './fotos.js';
@@ -26,13 +28,20 @@ export function vistaHabitual(ctx, cont) {
       el('div', { class: 'hab-dias', 'data-habitual': 'si' }, dias.map(dia => {
         const b = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'editar-dia-habitual', 'data-dia': dia.dia }, 'Editar día');
         b.addEventListener('click', () => abrirDia(ctx, dia, avisos, cuerpo, cargar));
+        const bQ = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'quitar-dia-habitual', 'data-dia': dia.dia }, 'Quitar día');
+        const run_bQ = conBloqueo(bQ, async () => { await cancelarDias(ctx, [dia.dia], avisos, cargar); }, 'Quitando…');
+        bQ.addEventListener('click', async () => {
+          const nd = (DIA_TXT[dia.dia] || dia.dia).toLowerCase();
+          if (!(await confirmar('Quitar el ' + nd, '¿Dejás de recibir tu pedido habitual de los ' + nd + '? Los demás días no cambian. Vale desde la próxima producción abierta; lo podés volver a armar cuando quieras.', 'Quitar día'))) return;
+          await run_bQ();
+        });
         return el('div', { class: 'hab-dia', 'data-dia': dia.dia },
-          el('div', { class: 'hab-dia-head' }, el('strong', { text: DIA_TXT[dia.dia] || dia.dia }), el('span', { class: 'spacer' }), b),
+          el('div', { class: 'hab-dia-head' }, el('strong', { text: DIA_TXT[dia.dia] || dia.dia }), el('span', { class: 'spacer' }), el('span', { class: 'row' }, b, bQ)),
           dia.lineas.map(l => el('div', { class: 'hab-linea', 'data-recurrente': String(l.pedido_recurrente_id) },
             el('span', { class: 'hab-prod' }, el('span', { text: (str(l.producto) || str(l.detalle_libre) || 'Producto') + ' · ' + cant(l.cantidad, l.unidad) }),
               str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null))));
       })),
-      libres.length ? el('div', { class: 'row' }, bNuevo('Agregar un día', 'btn-ghost', 'btn-agregar-dia')) : null,
+      el('div', { class: 'row' }, libres.length ? bNuevo('Agregar un día', 'btn-ghost', 'btn-agregar-dia') : null, bCancelarTodo(ctx, dias, avisos, cargar)),
       el('p', { class: 'muted small', text: 'Para cambiar un solo día sin tocar el habitual, usá “Pedido para una fecha”.' }));
   });
   cargar();
@@ -102,4 +111,34 @@ async function abrirNuevo(ctx, libres, avisos, cuerpo, recargar) {
       el('p', { class: 'muted small', text: 'Elegí el día y los productos que querés recibir cada semana.' })),
     arm.nodo));
   cuerpo.scrollIntoView({ block: 'start' });
+}
+
+// Quitar uno o varios días del habitual: editar_habitual_dia con lista vacía, de a un día (cada uno con su operacion_id). Si uno falla se frena y se avisa.
+async function cancelarDias(ctx, dias, avisos, recargar) {
+  montar(avisos);
+  const zona = el('div', { class: 'stack', id: 'hab-cancelar-aviso' });
+  montar(avisos, zona);
+  const hechos = [];
+  for (const d of dias) {
+    const r = await escribir(ctx, zona, 'editar_habitual_dia', { dia_semana: d, lineas: [] }, async () => {});
+    if (!r || !r.success) {
+      if (hechos.length) avisos.insertBefore(el('div', { class: 'notice ok', role: 'status' }, 'Se quitaron: ' + hechos.map(x => (DIA_TXT[x] || x).toLowerCase()).join(', ') + '.'), zona);
+      return false;
+    }
+    hechos.push(d);
+  }
+  const txt = dias.length > 1 ? 'Listo: dejaste de recibir tu pedido habitual.' : 'Listo: ya no recibís pedido habitual los ' + (DIA_TXT[dias[0]] || dias[0]).toLowerCase() + '.';
+  await recargar();
+  montar(avisos, el('div', { class: 'notice ok', role: 'status', 'data-codigo': 'HABITUAL_CANCELADO' }, txt + ' Vale desde la próxima producción abierta.'));
+  toast(txt);
+  return true;
+}
+function bCancelarTodo(ctx, dias, avisos, recargar) {
+  const b = el('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-cancelar-habitual', 'data-accion': 'cancelar-habitual' }, 'Dejar de recibir mi habitual');
+  const run_b = conBloqueo(b, async () => { await cancelarDias(ctx, dias.map(x => x.dia), avisos, recargar); }, 'Cancelando…');
+  b.addEventListener('click', async () => {
+    if (!(await confirmar('Dejar de recibir tu habitual', '¿Querés cancelar tu pedido habitual de todos los días (' + dias.map(x => (DIA_TXT[x.dia] || x.dia).toLowerCase()).join(', ') + ')? Vale desde la próxima producción abierta. Después lo podés volver a armar.', 'Cancelar mi habitual'))) return;
+    await run_b();
+  });
+  return b;
 }
