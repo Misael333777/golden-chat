@@ -99,7 +99,7 @@ async function cargarApoyo(ctx) {
   const productos = c.r && c.r.success && c.r.datos && Array.isArray(c.r.datos.productos)
     ? c.r.datos.productos.filter(x => x && Number.isInteger(x.producto_id)).map(x => ({ producto_id: x.producto_id, producto: str(x.producto), unidad: str(x.unidad), activo: x.activo === true, categoria: str(x.categoria),
       precio_minorista: nOk(x.precio_minorista), precio_mayorista: nOk(x.precio_mayorista), visible_clientes: x.visible_clientes === true, visible_repartidores: x.visible_repartidores === true,
-      imagen_url: str(x.imagen_url) })) : null;
+      imagen_url: str(x.imagen_url), orden: Number.isInteger(x.orden) ? x.orden : null })) : null;
   return { personas, productos, falla: p.falla || c.falla || null, r: (p.r && !p.r.success) ? p.r : ((c.r && !c.r.success) ? c.r : null) };
 }
 const rolesActivos = (p) => (p && Array.isArray(p.roles) ? p.roles.filter(r => r.estado === 'activo').map(r => r.rol) : []);
@@ -108,9 +108,11 @@ const repartidores = (apoyo) => (apoyo && apoyo.personas ? apoyo.personas.filter
 
 // ---------- catálogo + carrito (mismo componente que "Hacer pedido" de Cliente/Repartidor) ----------
 // Admin: sin precios (Pedidos nunca muestra importes). Productos activos + los ya cargados que hoy están inactivos (se conservan, como antes).
+// 16/10: en el orden que elige Golden ('orden' del catálogo); los que no tienen orden van después, por nombre.
 const productosArmador = (apoyo) => (apoyo.productos || []).filter(p => p.activo)
   .map(p => ({ producto_id: p.producto_id, nombre: p.producto || 'Producto ' + p.producto_id, categoria: p.categoria, unidad: p.unidad, precio: null,
-    tiene_imagen: typeof p.imagen_url === 'string' && DRIVE_RE.test(p.imagen_url) }));
+    tiene_imagen: typeof p.imagen_url === 'string' && DRIVE_RE.test(p.imagen_url), orden: p.orden }))
+  .sort((a, b) => ((a.orden ?? 1e9) - (b.orden ?? 1e9)) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
 // Fotos en Admin: la acción existente admin_general/ver_imagen (la misma del Catálogo de Admin). Caché en memoria; si falla, queda el ícono.
 const fotosAdmin = new Map(); // imagen_url -> Promise<data:|null>
 function cargadorFotosAdmin(ctx, apoyo) {
@@ -550,7 +552,7 @@ function abrirCrearExtra(ctx, apoyo, ini, alExito) {
 
 function editorLineas(productos, iniciales, cfg) {
   const { conDia, conSalida, reps, idBase, alCambiar } = cfg;
-  const activos = productos.filter(p => p.activo).sort((a, b) => (a.producto || '').localeCompare(b.producto || '', 'es'));
+  const activos = productos.filter(p => p.activo).sort((a, b) => ((a.orden ?? 1e9) - (b.orden ?? 1e9)) || (a.producto || '').localeCompare(b.producto || '', 'es'));
   const cont = el('div', { class: 'stack lin-editor', id: idBase + '-lineas' });
   const filas = [];
   const agregar = (ini) => {

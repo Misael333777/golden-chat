@@ -111,8 +111,9 @@ export async function catalogo(ctx) {
   const r = await traer(ctx, 'mi_catalogo');
   if (r.error) return r;
   const productos = (r.datos.productos || []).map(p => ({ producto_id: Number.isInteger(p.product_id) ? p.product_id : p.producto_id, nombre: str(p.nombre) || 'Producto', categoria: str(p.categoria), unidad: str(p.unidad), precio: typeof p.precio === 'number' ? p.precio : null,
-    tiene_imagen: p.tiene_imagen === true })) // tiene_imagen: la foto se pide aparte (usuario/imagen_producto) solo si es true
-    .filter(p => Number.isInteger(p.producto_id)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    tiene_imagen: p.tiene_imagen === true, orden: Number.isInteger(p.orden) ? p.orden : null })) // tiene_imagen: la foto se pide aparte (usuario/imagen_producto) solo si es true
+    // 16/10: primero los que tienen 'orden' (1, 2, 3... los elige Golden en el catálogo); después el resto por nombre.
+    .filter(p => Number.isInteger(p.producto_id)).sort((a, b) => ((a.orden ?? 1e9) - (b.orden ?? 1e9)) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
   return { productos, tipo_catalogo: str(r.datos.tipo_catalogo) };
 }
 

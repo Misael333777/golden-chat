@@ -61,7 +61,8 @@ export function vistaCatalogo(ctx, cont) {
       (filtros.visibilidad === 'todas' || (filtros.visibilidad === 'clientes' && p.visible_clientes === true) ||
         (filtros.visibilidad === 'repartidores' && p.visible_repartidores === true) ||
         (filtros.visibilidad === 'ocultos' && p.visible_clientes !== true && p.visible_repartidores !== true)) &&
-      (!filtros.categoria || p.categoria === filtros.categoria));
+      (!filtros.categoria || p.categoria === filtros.categoria))
+      .sort((a, b) => ((a.orden ?? 1e9) - (b.orden ?? 1e9)) || (a.producto || '').localeCompare(b.producto || '', 'es')); // 16/10: mismo orden que ven los clientes
     const activos = lista.filter(p => p.activo === true).length;
     const resumen = el('p', { class: 'muted small', id: 'cat-total', text: lista.length + ' productos · ' + activos + ' activos · ' + (lista.length - activos) + ' inactivos' +
       (vis.length !== lista.length ? ' · mostrando ' + vis.length : '') });
@@ -102,7 +103,7 @@ function filaProducto(ctx, p) {
   return el('button', { type: 'button', class: 'person-card prod-row cat-row-grid', 'data-producto': String(p.producto_id), onclick: () => ctx.ir('#/admin/catalogo/' + p.producto_id) },
     el('span', { class: 'pc-cell pc-nombre' }, el('span', { class: 'avatar avatar-prod', 'aria-hidden': 'true', text: inicial(p.producto) }),
       el('span', { class: 'person-id' }, el('span', { class: 'person-name', text: str(p.producto) || '(sin nombre)' }),
-        el('span', { class: 'person-also', text: [str(p.categoria), str(p.unidad)].filter(Boolean).join(' · ') }))),
+        el('span', { class: 'person-also', text: [Number.isInteger(p.orden) ? 'Orden ' + p.orden : null, str(p.categoria), str(p.unidad)].filter(Boolean).join(' · ') }))),
     el('span', { class: 'pc-cell cat-precio', 'data-precio': 'minorista' }, el('span', { class: 'pc-label', text: 'Minorista: ' }), precio(p.precio_minorista)),
     el('span', { class: 'pc-cell cat-precio', 'data-precio': 'mayorista' }, el('span', { class: 'pc-label', text: 'Mayorista: ' }), precio(p.precio_mayorista)),
     el('span', { class: 'pc-cell cat-vis chips' }, chipsVisibilidad(p)),
@@ -112,6 +113,10 @@ function filaProducto(ctx, p) {
 
 // ======================= helpers de formulario =======================
 const numOrNull = (v) => { const t = String(v == null ? '' : v).trim(); if (t === '') return null; const n = Number(t.replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
+// 16/10: orden en los catálogos (1 = primero arriba de todo). Vacío = sin orden (va después, por nombre). Entero de 1 a 999.
+const ordenOrNull = (v) => { const n = numOrNull(v); if (n === null) return null; return (Number.isInteger(n) && n >= 1 && n <= 999) ? n : NaN; };
+const TXT_ORDEN = '1 = aparece primero en todos los catálogos, 2 segundo… Vacío = va después, por nombre.';
+const ERR_ORDEN = 'El orden tiene que ser un número entero de 1 a 999, o quedar vacío.';
 const txtOrNull = (v) => { const t = String(v == null ? '' : v).trim(); return t === '' ? null : t; };
 const campo = (id, label, input, hint) => el('div', { class: 'field' }, el('label', { for: id, text: label }), input, hint ? el('span', { class: 'hint', text: hint }) : null);
 const check = (id, label, checked) => {
@@ -147,13 +152,15 @@ function abrirCrear(ctx) {
   const cAct = check('crear-activo', 'Activo', true);
   const iPres = el('input', { class: 'input', id: 'crear-presentacion', maxlength: '120', autocomplete: 'off' });
   const iPeso = el('input', { class: 'input', id: 'crear-peso', type: 'number', min: '0', step: '0.001', inputmode: 'decimal' });
+  const iOrden = el('input', { class: 'input', id: 'crear-orden', type: 'number', min: '1', max: '999', step: '1', inputmode: 'numeric' });
   const selImg = selectorImagen(ctx, { id: 'crear-imagen', actual: null, destino: 'producto', etiqueta: 'Imagen del producto' }); // archivo, nunca URL
   const zona = el('div', { class: 'stack', id: 'crear-producto-aviso' });
   const boton = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-crear-producto' }, 'Crear producto');
   const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' }, lista,
     el('div', { class: 'form-grid two' },
       campo('crear-categoria', 'Categoría', iCat), campo('crear-producto', 'Nombre', iNom), campo('crear-unidad', 'Unidad', iUni),
-      campo('crear-presentacion', 'Presentación (opcional)', iPres)),
+      campo('crear-presentacion', 'Presentación (opcional)', iPres),
+      campo('crear-orden', 'Orden (opcional)', iOrden, TXT_ORDEN)),
     el('fieldset', { class: 'grupo' }, el('legend', { text: 'Precios por lista' }),
       el('div', { class: 'form-grid two' }, campo('crear-minorista', 'Precio minorista', iMin), campo('crear-mayorista', 'Precio mayorista', iMay))),
     el('fieldset', { class: 'grupo' }, el('legend', { text: 'Visibilidad por rol' }),
@@ -168,6 +175,7 @@ function abrirCrear(ctx) {
       visible_clientes: cCli.input.checked, visible_repartidores: cRep.input.checked, activo: cAct.input.checked };
     const pres = txtOrNull(iPres.value); if (pres !== null) d.presentacion = pres;
     const peso = numOrNull(iPeso.value); if (peso !== null) d.peso_kg_unidad = peso;
+    const orden = ordenOrNull(iOrden.value); if (orden !== null) d.orden = orden;
     return d;
   };
   async function enviar(campos) {
@@ -188,6 +196,7 @@ function abrirCrear(ctx) {
     if (d.precio_minorista === null || d.precio_mayorista === null || Number.isNaN(d.precio_minorista) || Number.isNaN(d.precio_mayorista) || d.precio_minorista < 0 || d.precio_mayorista < 0)
       return montar(zona, aviso('error', 'Indicá los dos precios con un número mayor o igual a 0.'));
     if (Number.isNaN(d.peso_kg_unidad)) return montar(zona, aviso('error', 'El peso debe ser un número.'));
+    if (Number.isNaN(d.orden)) return montar(zona, aviso('error', ERR_ORDEN));
     const img = await selImg.resolver();
     if (img.error) return montar(zona, aviso('error', img.error));
     if (img.url) d.imagen_url = img.url;
@@ -246,7 +255,8 @@ export function vistaProducto(ctx, cont, idTexto) {
         el('dl', { class: 'dl' },
           dato('tag', 'Categoría', el('dd', { id: 'prod-categoria', text: str(p.categoria) || '—' })),
           dato('box', 'Unidad', el('dd', { id: 'prod-unidad', text: str(p.unidad) || '—' })),
-          dato('box', 'Presentación', el('dd', { id: 'prod-presentacion', text: str(p.presentacion) || 'Sin presentación' }))),
+          dato('box', 'Presentación', el('dd', { id: 'prod-presentacion', text: str(p.presentacion) || 'Sin presentación' })),
+          dato('tag', 'Orden en el catálogo', el('dd', { id: 'prod-orden', text: Number.isInteger(p.orden) ? String(p.orden) : 'Sin orden (va después, por nombre)' }))),
         el('dl', { class: 'dl' },
           dato('peso', 'Peso por unidad', el('dd', { id: 'prod-peso', text: typeof p.peso_kg_unidad === 'number' ? String(p.peso_kg_unidad).replace('.', ',') + ' kg' : 'Sin peso' })),
           dato('img', 'Imagen', el('dd', { id: 'prod-imagen' }, imgCaja)))));
@@ -300,6 +310,7 @@ export function vistaProducto(ctx, cont, idTexto) {
     const iUni = el('input', { class: 'input', id: 'editar-unidad', maxlength: '20', value: str(p.unidad) || '' });
     const iPres = el('input', { class: 'input', id: 'editar-presentacion', maxlength: '120', value: str(p.presentacion) || '' });
     const iPeso = el('input', { class: 'input', id: 'editar-peso', type: 'number', min: '0', step: '0.001', inputmode: 'decimal', value: typeof p.peso_kg_unidad === 'number' ? String(p.peso_kg_unidad) : '' });
+    const iOrden = el('input', { class: 'input', id: 'editar-orden', type: 'number', min: '1', max: '999', step: '1', inputmode: 'numeric', value: Number.isInteger(p.orden) ? String(p.orden) : '' });
     const selImg = selectorImagen(ctx, { id: 'editar-imagen', actual: str(p.imagen_url) || null, destino: 'producto', etiqueta: 'Imagen del producto' });
     const zona = el('div', { class: 'stack', id: 'editar-producto-aviso' });
     const boton = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-producto' }, 'Guardar cambios');
@@ -307,6 +318,7 @@ export function vistaProducto(ctx, cont, idTexto) {
       el('div', { class: 'form-grid two' },
         campo('editar-categoria', 'Categoría', iCat), campo('editar-producto', 'Nombre', iNom), campo('editar-unidad', 'Unidad', iUni),
         campo('editar-presentacion', 'Presentación', iPres, 'Dejala vacía para quitarla.'),
+        campo('editar-orden', 'Orden en el catálogo', iOrden, TXT_ORDEN),
         campo('editar-peso', 'Peso por unidad en kg', iPeso, 'Vacío = sin peso.'), el('div', { class: 'field' }, el('span', { class: 'field-label', text: 'Imagen' }), selImg.nodo)),
       el('p', { class: 'muted small', text: 'Los precios, la visibilidad y el estado se cambian desde su propio bloque en la ficha.' }),
       boton, zona);
@@ -330,6 +342,9 @@ export function vistaProducto(ctx, cont, idTexto) {
       if (img.error) return montar(zona, aviso('error', img.error));
       if ((img.url || null) !== (str(p.imagen_url) || null)) campos.imagen_url = img.url;
       if (peso !== (typeof p.peso_kg_unidad === 'number' ? p.peso_kg_unidad : null)) campos.peso_kg_unidad = peso;
+      const orden = ordenOrNull(iOrden.value);
+      if (Number.isNaN(orden)) return montar(zona, aviso('error', ERR_ORDEN));
+      if (orden !== (Number.isInteger(p.orden) ? p.orden : null)) campos.orden = orden;
       if (Object.keys(campos).length === 1) return montar(zona, aviso('info', 'No hay cambios para guardar.'));
       await enviar(campos);
     }, 'Guardando…'));

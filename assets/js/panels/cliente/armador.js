@@ -47,9 +47,9 @@ export function armadorPedido(opc) {
   const conPrecio = opc.mostrarPrecios !== false;
   const textoEnviar = opc.textoEnviar || 'Enviar pedido';
   const porId = new Map(productos.map(p => [p.producto_id, p]));
-  // Categorías reales del catálogo, en el orden del catálogo (por id de producto).
+  // Categorías reales del catálogo, en el orden en que llegan los productos (16/10: el orden que elige Golden; antes por id).
   const cats = [];
-  for (const p of productos.slice().sort((a, b) => a.producto_id - b.producto_id)) { const c = p.categoria || 'Otros'; if (!cats.includes(c)) cats.push(c); }
+  for (const p of productos) { const c = p.categoria || 'Otros'; if (!cats.includes(c)) cats.push(c); }
   const estado = { texto: '', cat: 'todos' };
   let enviando = false;
   const carrito = new Map(); // producto_id -> { cantidad, detalle }
