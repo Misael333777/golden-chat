@@ -45,7 +45,7 @@ const FIN_TXT = { generado: 'Cargo generado', pendiente_de_generar: 'Cargo pendi
 const chipFin = (f) => el('span', { class: 'chip ' + (f === 'pendiente_de_generar' ? 'warn' : (f === 'generado' ? 'ok' : '')), 'data-finanzas': f || 'ninguno', text: 'Finanzas: ' + (FIN_TXT[f] || '—') });
 const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 const DIA_TXT = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo' };
-const SALIDAS = ['salida 1', 'salida 2', 'salida 3', 'salida 4'];
+const SALIDAS = ['salida 1', 'salida 2']; // 15/10: Golden solo usa salida 1 y 2
 const salidaTxt = (s) => str(s) ? s.charAt(0).toUpperCase() + s.slice(1) : 'Sin salida';
 // Etapa 4: fila ancla = sin producto y cantidad 0 (solo guarda la logística del día). Nunca se muestra como producto.
 const esAncla = (l) => !!l && (l.ancla === true || ((l.producto_id === null || l.producto_id === undefined) && l.cantidad === 0));
@@ -54,7 +54,7 @@ const logisticaDia = (ls) => { const l = (ls || [])[0] || {}; return { salida: s
 
 // Mensajes claros por código (el código del backend se muestra siempre al lado). Sin texto propio, se usa el mensaje del backend.
 const MSJ = {
-  PRODUCCION_CERRADA: 'La producción de esa fecha ya está cerrada o pasó el horario de corte (22:00 del día anterior). No se pueden cargar ni cambiar pedidos normales para esa fecha.',
+  PRODUCCION_CERRADA: 'La producción de esa fecha ya está cerrada o pasó el horario de corte (22:30 del día anterior). No se pueden cargar ni cambiar pedidos normales para esa fecha.',
   CIERRE_EN_CURSO: 'Se está cerrando la producción. Los cambios del habitual se pueden hacer cuando termine el cierre.',
   FECHA_INVALIDA: null,
   OPERACION_ID_REUTILIZADO: 'Esa operación ya se había usado con otros datos. Volvé a intentarlo como una operación nueva.',
@@ -721,7 +721,7 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
       titulo: 'Pedido del ' + fmtCorta(fecha), textoEnviar: 'Guardar pedido', idEnviar: 'btn-guardar-pedido', idAviso: 'pn-aviso',
       avisoDia: (d.tiene_habitual
         ? 'Tiene habitual este día: se guarda como “solo por hoy” y reemplaza el habitual únicamente para el ' + fmtMin(fecha) + '.'
-        : 'No tiene habitual este día: se guarda como pedido nuevo para el ' + fmtMin(fecha) + '.') + ' Se puede cambiar hasta las 22:00 del día anterior.',
+        : 'No tiene habitual este día: se guarda como pedido nuevo para el ' + fmtMin(fecha) + '.') + ' Se puede cambiar hasta las 22:30 del día anterior.',
       cargarFoto: cargadorFotosAdmin(ctx, apoyo), alCancelar: alExito,
       alEnviar: (items, zona) => escribir(ctx, zona, 'crear_pedido_normal', { persona_id: pid, rol_pedido: rol, fecha, items }, async (r) => {
         montar(avisos, avisoNegocio(r));
@@ -789,7 +789,7 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
             el('span', { class: 'hab-prod' }, el('span', { text: (str(l.producto) || str(l.detalle_libre) || 'Producto') + ' · ' + cant(l.cantidad, l.unidad) }),
               str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null))));
       })),
-      el('p', { class: 'muted small', text: 'Los cambios del habitual no se pueden hacer mientras se cierra la producción (desde las 22:00 hasta el cierre). Las fechas ya cerradas no cambian.' }));
+      el('p', { class: 'muted small', text: 'Los cambios del habitual no se pueden hacer mientras se cierra la producción (desde las 22:30 hasta el cierre). Las fechas ya cerradas no cambian.' }));
   }
   // Quitar días del habitual (uno o todos): editar_habitual_dia con lista vacía, de a un día. Si uno falla se frena y se avisa.
   async function quitarDias(lista, recargar) {

@@ -322,7 +322,7 @@ function bloqueAclaracionesFecha(ctx, d) {
     a && a.excluidas && a.excluidas.length ? el('p', { class: 'muted small', text: a.excluidas.length + ' aclaración(es) no aplican a esta fecha: ' + [...new Set(a.excluidas.map(x => EXC[x.motivo] || x.motivo))].join(', ') + '.' }) : null);
 }
 
-// Cinco valores MANUALES por fecha. Ninguno se calcula a partir de otro ni del TOTAL KILOS. Se guardan juntos; vacío = sin informar.
+// Cinco valores de producción: desde 15/10 la planilla los CALCULA sola (mañana 540, noche = total − 540, harina, masas). Lo que se cargue acá para la fecha reemplaza al cálculo; vacío = se calcula.
 const VALORES = [['produccion_manana', 'Producción mañana'], ['turno_noche_kg', 'Hacer turno noche (kg)'], ['harina_a_usar', 'Harina a usar'], ['masa_1', 'Masa 1'], ['masa_2', 'Masa 2']];
 function bloqueValores(ctx, d, avisos, recargar) {
   const v = d.valores_produccion || {};
@@ -343,11 +343,11 @@ function bloqueValores(ctx, d, avisos, recargar) {
     await escribir(ctx, zona, 'guardar_valores_produccion', campos, async (r) => { montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await recargar(); });
   }, 'Guardando…'));
   return el('div', { class: 'card stack', id: 'prd-valores', 'data-editable': String(editable) },
-    el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-pedido', text: 'Valores de producción (manuales)' }), el('span', { class: 'spacer' }),
-      el('span', { class: 'chip ' + (v.existe ? 'ok' : 'warn'), text: v.existe ? 'Cargados' : 'Sin cargar' })),
+    el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-pedido', text: 'Valores de producción' }), el('span', { class: 'spacer' }),
+      el('span', { class: 'chip ' + (v.existe ? 'ok' : 'warn'), text: v.existe ? 'Con valores a mano' : 'Automático' })),
     el('p', { class: 'muted small', text: editable
-      ? 'Se cargan a mano para esta fecha y se imprimen tal cual en la planilla. Ninguno se calcula a partir de otro. Se pueden editar hasta el corte; al cerrar quedan congelados. Vacío = “No informado”.'
-      : 'La fecha ya no se puede modificar (pasó el corte o está en cierre). Al cerrar, la planilla usa los valores guardados.' }),
+      ? 'La planilla los calcula sola: producción mañana 540, turno noche = total − 540, harina = turno noche × 50 ÷ 60 (redondeada para arriba) y las masas con las dos amasadoras (50 kg + 25 kg). Solo cargá un valor si querés reemplazar el cálculo para esta fecha; vacío = se calcula. Se puede editar hasta el corte; al cerrar queda congelado.'
+      : 'La fecha ya no se puede modificar (pasó el corte o está en cierre). La planilla usa el cálculo automático y los valores cargados a mano, si los hay.' }),
     v.modificado_en ? el('p', { class: 'muted small', text: 'Última modificación: ' + fmtHora(v.modificado_en) }) : null,
     form);
 }
