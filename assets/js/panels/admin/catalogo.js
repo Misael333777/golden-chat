@@ -10,7 +10,8 @@ import { avisoFalla, avisoSinConfirmar } from './personas.js';
 import { selectorImagen, mostrarImagen } from './imagenes.js';
 
 const TIPO = 'admin_general';
-const filtros = { texto: '', estado: 'todos', visibilidad: 'todas', categoria: '' };
+// 16/10: por defecto solo los productos activos; los desactivados quedan en el filtro 'Inactivos' (o 'Todos los estados').
+const filtros = { texto: '', estado: 'activos', visibilidad: 'todas', categoria: '' };
 let categoriasConocidas = [];
 
 const str = (v) => (typeof v === 'string' ? v : null);
