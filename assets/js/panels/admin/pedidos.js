@@ -754,7 +754,7 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
       return montar(z, head(b), el('p', { class: 'muted', 'data-habitual': 'no', text: 'No tiene pedido habitual. Recurrente significa “previsto”: no genera deuda.' }));
     }
     const diasConLinea = d.dias.map(x => x.dia);
-    const bAgregar = persona && diasConLinea.length < 7 ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-agregar-dia', onclick: () => abrirHabitual(z, 'agregar_dia', diasConLinea, recargar) }, 'Agregar día') : null;
+    const bAgregar = persona && diasConLinea.length < 7 ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-agregar-dia', onclick: () => abrirHabitual(z, 'agregar_dia', diasConLinea, recargar) }, 'Agregar días') : null;
     const dias = d.dias.slice().sort((a, b) => DIAS.indexOf(a.dia) - DIAS.indexOf(b.dia));
     // 2026-10-08: cancelar = editar_habitual_dia con lista vacía (queda la fila ancla con salida/repartidor; no entra en producción).
     const conProductos = dias.filter(x => x.lineas.some(l => !esAncla(l))).map(x => x.dia);
@@ -832,33 +832,64 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     z.scrollIntoView({ block: 'start' });
   }
 
-  // Configurar habitual / Agregar día: un día por vez con el catálogo + carrito. Día, salida y repartidor van arriba del carrito y se aplican
-  // a todas las líneas del día (mismos campos que antes: dia_semana, unidad, salida, repartidor_persona_id). Para más días: "Agregar día".
+  // Configurar habitual / Agregar días con el catálogo + carrito. 16/10: se tildan uno o varios días (o "Todos los días"); productos,
+  // salida y repartidor se aplican iguales a cada día elegido (mismos campos que antes: dia_semana, unidad, salida, repartidor_persona_id).
+  //  - configurar_recurrente (persona sin habitual): UNA operación con las líneas de todos los días (el backend ya lo acepta; máx. 50 líneas).
+  //  - agregar_dia: de a un día (cada uno con su operacion_id); si uno falla se frena y se avisa cuáles quedaron guardados.
   function abrirHabitual(z, accion, diasOcupados, alExito) {
     montar(avisos);
     const libres = DIAS.filter(dd => !(diasOcupados || []).includes(dd));
-    const sDia = el('select', { class: 'select', id: 'hab-dia' }, libres.map(dd => el('option', { value: dd, text: DIA_TXT[dd] })));
+    const checks = libres.map(dd => { const i = el('input', { type: 'checkbox', id: 'hab-dia-' + dd, checked: libres.length === 1 });
+      return { d: dd, i, nodo: el('label', { class: 'check', for: 'hab-dia-' + dd }, i, el('span', { text: DIA_TXT[dd] })) }; });
+    const bTodos = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'hab-todos' }, 'Todos los días');
+    const pintarTodos = () => { bTodos.textContent = checks.every(c => c.i.checked) ? 'Ninguno' : 'Todos los días'; };
+    bTodos.addEventListener('click', () => { const todos = checks.every(c => c.i.checked); checks.forEach(c => { c.i.checked = !todos; }); pintarTodos(); });
+    checks.forEach(c => c.i.addEventListener('change', pintarTodos)); pintarTodos();
+    const elegidos = () => checks.filter(c => c.i.checked).map(c => c.d);
+    const nombres = (ls) => ls.map(x => (DIA_TXT[x] || x).toLowerCase()).join(', ');
     const sSal = selectSalida('hab-salida', null);
     const sRep = selectRepartidor('hab-repartidor', null);
     const arm = armadorPedido({
       productos: productosArmador(apoyo), iniciales: [], mostrarPrecios: false,
-      titulo: 'Habitual del día', textoEnviar: accion === 'agregar_dia' ? 'Agregar día' : 'Guardar habitual', idEnviar: 'btn-guardar-habitual', idAviso: 'hab-aviso',
-      encabezado: el('div', { class: 'stack arm-logistica' }, campo('hab-dia', 'Día', sDia), el('div', { class: 'form-grid two' }, campo('hab-salida', 'Salida (opcional)', sSal), campo('hab-repartidor', 'Repartidor (opcional)', sRep))),
+      titulo: 'Habitual del día', textoEnviar: accion === 'agregar_dia' ? 'Agregar días' : 'Guardar habitual', idEnviar: 'btn-guardar-habitual', idAviso: 'hab-aviso',
+      encabezado: el('div', { class: 'stack arm-logistica' },
+        el('div', { class: 'field', id: 'hab-dias' }, el('div', { class: 'row' }, el('strong', { text: 'Días' }), el('span', { class: 'spacer' }), libres.length > 1 ? bTodos : null),
+          el('div', { class: 'checks' }, checks.map(c => c.nodo))),
+        el('div', { class: 'form-grid two' }, campo('hab-salida', 'Salida (opcional)', sSal), campo('hab-repartidor', 'Repartidor (opcional)', sRep))),
       cargarFoto: cargadorFotosAdmin(ctx, apoyo), alCancelar: alExito,
       alEnviar: (items, zona) => {
-        const lineas = items.map(it => {
+        const dias = elegidos().filter(x => libres.includes(x));
+        if (!dias.length) { montar(zona, aviso('error', 'Tildá al menos un día.', 'DIA_INVALIDO')); return null; }
+        const lineaDe = (it, dia) => {
           const o = Object.assign({}, it);
-          if (accion === 'configurar_recurrente') o.dia_semana = sDia.value;
+          if (dia) o.dia_semana = dia;
           const u = unidadDe(it.producto_id); if (u) o.unidad = u;
           o.salida = sSal.value || null; o.repartidor_persona_id = sRep.value || null;
           return o;
-        });
-        const campos = accion === 'agregar_dia' ? { persona_id: pid, dia_semana: sDia.value, lineas } : { persona_id: pid, lineas };
-        return escribir(ctx, zona, accion, campos, async (r) => { montar(avisos, avisoNegocio(r)); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(); });
+        };
+        const okTxt = (r) => (dias.length > 1 ? 'Habitual guardado para ' + dias.length + ' días (' + nombres(dias) + ').' : (OK_TXT[r.codigo] || 'Listo.'));
+        if (accion === 'configurar_recurrente') {
+          const lineas = [].concat(...dias.map(dia => items.map(it => lineaDe(it, dia))));
+          if (lineas.length > 50) { montar(zona, aviso('error', 'Son demasiados productos para tantos días (máximo 50 en total). Guardá algunos días y después sumá los demás con “Agregar días”.', 'LINEAS_INVALIDAS')); return null; }
+          return escribir(ctx, zona, accion, { persona_id: pid, lineas }, async (r) => { montar(avisos, avisoNegocio(r)); toast(okTxt(r)); await alExito(); });
+        }
+        return (async () => {
+          const hechos = []; let ultimo = null;
+          for (const dia of dias) {
+            const r = await escribir(ctx, zona, 'agregar_dia', { persona_id: pid, dia_semana: dia, lineas: items.map(it => lineaDe(it, null)) }, async () => {});
+            if (!r || !r.success) {
+              if (hechos.length) zona.insertBefore(aviso('ok', 'Se guardaron: ' + nombres(hechos) + '. Los demás días no.'), zona.firstChild);
+              return r;
+            }
+            hechos.push(dia); ultimo = r;
+          }
+          montar(avisos, avisoNegocio(ultimo)); toast(okTxt(ultimo)); await alExito();
+          return ultimo;
+        })();
       },
     });
-    marcoHabitual(z, (accion === 'agregar_dia' ? 'Agregar día al habitual — ' : 'Configurar habitual — ') + (persona.nombre || pid),
-      accion === 'agregar_dia' ? 'Elegí el día y sus productos. Salida y repartidor valen para todo el día.' : 'Elegí el primer día y sus productos. Después podés sumar más días con “Agregar día”.', arm);
+    marcoHabitual(z, (accion === 'agregar_dia' ? 'Agregar días al habitual — ' : 'Configurar habitual — ') + (persona.nombre || pid),
+      'Tildá uno o varios días y elegí los productos: se guardan iguales en cada día, con la misma salida y repartidor. Después podés cambiar un día solo con “Editar día”.', arm);
   }
   // Editar día completo (editar_habitual_dia): todas las líneas del día (agregar / quitar / cantidades > 0, sin repetidos) + salida y repartidor del DÍA.
   // La logística se envía solo si cambió. El historial anterior se conserva (lo versiona Recurrentes Cambios PROD).

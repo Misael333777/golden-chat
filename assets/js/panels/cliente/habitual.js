@@ -41,7 +41,7 @@ export function vistaHabitual(ctx, cont) {
             el('span', { class: 'hab-prod' }, el('span', { text: (str(l.producto) || str(l.detalle_libre) || 'Producto') + ' · ' + cant(l.cantidad, l.unidad) }),
               str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null))));
       })),
-      el('div', { class: 'row' }, libres.length ? bNuevo('Agregar un día', 'btn-ghost', 'btn-agregar-dia') : null, bCancelarTodo(ctx, dias, avisos, cargar)),
+      el('div', { class: 'row' }, libres.length ? bNuevo('Agregar días', 'btn-ghost', 'btn-agregar-dia') : null, bCancelarTodo(ctx, dias, avisos, cargar)),
       el('p', { class: 'muted small', text: 'Para cambiar un solo día sin tocar el habitual, usá “Pedido para una fecha”.' }));
   });
   cargar();
@@ -79,7 +79,9 @@ async function abrirDia(ctx, dia, avisos, cuerpo, recargar) {
   cuerpo.scrollIntoView({ block: 'start' });
 }
 
-// Armar un día NUEVO del habitual (recurrente/nuevo_dia_habitual { dia_semana, lineas }): solo días que hoy no tiene.
+// Armar días NUEVOS del habitual (recurrente/nuevo_dia_habitual { dia_semana, lineas }): solo días que hoy no tiene.
+// 16/10: se pueden tildar varios días (o "Todos los días"): los mismos productos se guardan en cada día elegido, de a un día
+// (cada uno con su operacion_id). Si uno falla se frena y se avisa cuáles quedaron guardados.
 // No se elige ni se envía salida ni repartidor: los asigna Admin General. Si el día ya existe, el backend responde DIA_YA_EXISTE.
 async function abrirNuevo(ctx, libres, avisos, cuerpo, recargar) {
   montar(avisos);
@@ -88,27 +90,45 @@ async function abrirNuevo(ctx, libres, avisos, cuerpo, recargar) {
   const cat = await catalogo(ctx);
   if (!cuerpo.isConnected) return;
   if (cat.error) return montar(cuerpo, cat.error, el('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: recargar }, 'Volver'));
-  const sDia = el('select', { class: 'select', id: 'hn-dia', 'aria-label': 'Día de la semana' }, libres.map(x => el('option', { value: x, text: DIA_TXT[x] || x })));
+  const checks = libres.map(x => { const i = el('input', { type: 'checkbox', id: 'hn-dia-' + x, checked: libres.length === 1 });
+    return { d: x, i, nodo: el('label', { class: 'check', for: 'hn-dia-' + x }, i, el('span', { text: DIA_TXT[x] || x })) }; });
+  const bTodos = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'hn-todos' }, 'Todos los días');
+  const pintarTodos = () => { bTodos.textContent = checks.every(c => c.i.checked) ? 'Ninguno' : 'Todos los días'; };
+  bTodos.addEventListener('click', () => { const todos = checks.every(c => c.i.checked); checks.forEach(c => { c.i.checked = !todos; }); pintarTodos(); });
+  checks.forEach(c => c.i.addEventListener('change', pintarTodos)); pintarTodos();
+  const elegidos = () => checks.filter(c => c.i.checked).map(c => c.d);
   const arm = armadorPedido({
     productos: cat.productos, iniciales: [],
-    titulo: 'Tu habitual nuevo', textoEnviar: 'Guardar día', idEnviar: 'btn-guardar-nuevo-dia', idAviso: 'hn-aviso',
+    titulo: 'Tu habitual nuevo', textoEnviar: 'Guardar', idEnviar: 'btn-guardar-nuevo-dia', idAviso: 'hn-aviso',
     avisoDia: 'Lo recibís todas las semanas ese día. Se puede cargar hasta las 22:30 del día anterior; si la próxima producción ya cerró, empieza en la siguiente. La salida y el repartidor los asigna Golden.',
     cargarFoto: (id) => cargarFoto(ctx, id), alCancelar: recargar,
     alEnviar: (items, zona) => {
-      const dia = sDia.value;
-      if (!libres.includes(dia)) { montar(zona, el('div', { class: 'notice error', role: 'alert' }, 'Elegí un día de la semana.')); return null; }
-      return escribir(ctx, zona, 'nuevo_dia_habitual', { dia_semana: dia, lineas: items }, async (r) => {
-        const d = r.datos || {};
-        montar(avisos, el('div', { class: 'notice ok', role: 'status', 'data-codigo': r.codigo }, textoOk(r) + (d.aplica_desde ? ' Empieza el ' + fmtFecha(d.aplica_desde).toLowerCase() + '.' : ''), el('span', { class: 'code', text: r.codigo })));
-        toast(textoOk(r));
+      const dias = elegidos().filter(x => libres.includes(x));
+      if (!dias.length) { montar(zona, el('div', { class: 'notice error', role: 'alert' }, 'Tildá al menos un día de la semana.')); return null; }
+      return (async () => {
+        const hechos = []; let ultimo = null;
+        for (const dia of dias) {
+          const r = await escribir(ctx, zona, 'nuevo_dia_habitual', { dia_semana: dia, lineas: items }, async () => {});
+          if (!r || !r.success) {
+            if (hechos.length) zona.insertBefore(el('div', { class: 'notice ok', role: 'status' }, 'Se guardaron: ' + hechos.map(x => (DIA_TXT[x] || x).toLowerCase()).join(', ') + '. Los demás días no.'), zona.firstChild);
+            return r;
+          }
+          hechos.push(dia); ultimo = r;
+        }
+        const d = ultimo.datos || {};
+        const txt = dias.length > 1 ? 'Listo: guardaste tu habitual de ' + dias.length + ' días (' + dias.map(x => (DIA_TXT[x] || x).toLowerCase()).join(', ') + ').' : textoOk(ultimo);
         await recargar();
-      });
+        montar(avisos, el('div', { class: 'notice ok', role: 'status', 'data-codigo': ultimo.codigo }, txt + (d.aplica_desde ? ' Empieza el ' + fmtFecha(d.aplica_desde).toLowerCase() + '.' : ''), el('span', { class: 'code', text: ultimo.codigo })));
+        toast(dias.length > 1 ? 'Habitual guardado.' : textoOk(ultimo));
+        return ultimo;
+      })();
     },
   });
   montar(cuerpo, el('div', { class: 'stack arm-marco', id: 'hn-form' },
     el('div', { class: 'arm-intro' }, el('h3', { class: 'arm-titulo', text: libres.length === 7 ? 'Armá tu habitual' : 'Agregar un día a tu habitual' }),
-      el('div', { class: 'field' }, el('label', { for: 'hn-dia', text: 'Día de la semana' }), sDia),
-      el('p', { class: 'muted small', text: 'Elegí el día y los productos que querés recibir cada semana.' })),
+      el('div', { class: 'field', id: 'hn-dias' }, el('div', { class: 'row' }, el('strong', { text: 'Días de la semana' }), el('span', { class: 'spacer' }), libres.length > 1 ? bTodos : null),
+        el('div', { class: 'checks' }, checks.map(c => c.nodo))),
+      el('p', { class: 'muted small', text: 'Tildá uno o varios días y elegí los productos: se guardan iguales en cada día. Después podés cambiar un día solo con “Editar día”.' })),
     arm.nodo));
   cuerpo.scrollIntoView({ block: 'start' });
 }
