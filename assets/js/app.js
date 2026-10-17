@@ -8,6 +8,9 @@ import { vistaSelector } from './panels/selector.js';
 import { vistaAdmin } from './panels/admin/shell.js';
 import { vistaFinanzas } from './panels/finanzas/shell.js';
 import { vistaCliente, vistaRepartidor } from './panels/cliente/shell.js';
+import { iniciarInstalacion } from './instalar.js';
+
+iniciarInstalacion(); // 17/10: la pagina se puede instalar como app (boton en el inicio de los paneles de administracion)
 
 const app = document.getElementById('app');
 
