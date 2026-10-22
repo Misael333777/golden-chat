@@ -870,10 +870,17 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
           return o;
         };
         const okTxt = (r) => (dias.length > 1 ? 'Habitual guardado para ' + dias.length + ' días (' + nombres(dias) + ').' : (OK_TXT[r.codigo] || 'Listo.'));
-        const agregarDias = async () => {
+        const agregarDias = async (desdeConfigurar) => {
           const hechos = []; let ultimo = null;
           for (const dia of dias) {
-            const r = await escribir(ctx, zona, 'agregar_dia', { persona_id: pid, dia_semana: dia, lineas: items.map(it => lineaDe(it, null)) }, async () => {});
+            let r = await escribir(ctx, zona, 'agregar_dia', { persona_id: pid, dia_semana: dia, lineas: items.map(it => lineaDe(it, null)) }, async () => {});
+            // 22/10: el día ya existe pero solo como "día sin productos" (fila ancla con salida/repartidor; el habitual figura vacío):
+            // se completa con editar_habitual_dia, que reemplaza el ancla por los productos y deja la salida/repartidor elegidos.
+            if (desdeConfigurar && r && !r.success && r.codigo === 'DIA_YA_EXISTE') {
+              montar(zona);
+              r = await escribir(ctx, zona, 'editar_habitual_dia', { persona_id: pid, dia_semana: dia, lineas: items,
+                logistica: { salida: sSal.value || null, repartidor_persona_id: sRep.value || null } }, async () => {});
+            }
             if (!r || !r.success) {
               if (hechos.length) zona.insertBefore(aviso('ok', 'Se guardaron: ' + nombres(hechos) + '. Los demás días no.'), zona.firstChild);
               return r;
@@ -889,11 +896,11 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
           return (async () => {
             const r = await escribir(ctx, zona, accion, { persona_id: pid, lineas }, async (r) => { montar(avisos, avisoNegocio(r)); toast(okTxt(r)); await alExito(); });
             // 22/10: la persona tiene un habitual viejo desactivado (no se ve, pero existe): se arma día por día con agregar_dia.
-            if (r && !r.success && r.codigo === 'PERSONA_ES_RECURRENTE') { montar(zona); return agregarDias(); }
+            if (r && !r.success && r.codigo === 'PERSONA_ES_RECURRENTE') { montar(zona); return agregarDias(true); }
             return r;
           })();
         }
-        return agregarDias();
+        return agregarDias(false);
       },
     });
     marcoHabitual(z, (accion === 'agregar_dia' ? 'Agregar días al habitual — ' : 'Configurar habitual — ') + (persona.nombre || pid),
