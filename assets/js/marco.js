@@ -56,7 +56,7 @@ export function marco(ctx, o) {
     lateral, velo,
     el('div', { class: 'cg-main' }, cabeceraTop,
       el('div', { class: 'cg-content' }, ...(o.zonas || []), o.selector || null, o.contenido,
-        el('footer', { class: 'cg-pie' }, el('span', { text: 'Golden. Panadería en buenas manos.' }), el('span', { text: o.pie || 'Pedidos para mañana hasta las 22:30.' })))),
+        el('footer', { class: 'cg-pie' }, el('span', { text: 'Golden. Panadería en buenas manos.' }), el('span', { text: o.pie || 'Pedidos para mañana hasta las 22:00.' })))),
     barra));
   window.scrollTo(0, 0);
 }

@@ -60,7 +60,7 @@ async function abrirDia(ctx, dia, avisos, cuerpo, recargar) {
   const arm = armadorPedido({
     productos: cat.productos, iniciales: dia.lineas.filter(l => Number.isInteger(l.producto_id)),
     titulo: 'Tu habitual del ' + nombreDia, conservarIniciales: true, textoEnviar: 'Guardar día', idEnviar: 'btn-guardar-dia', idAviso: 'hd-aviso',
-    avisoDia: 'Es tu habitual completo de los ' + nombreDia + ': agregá, quitá o cambiá cantidades. Se puede cambiar hasta las 22:30 del día anterior; si la próxima producción ya cerró, vale desde la siguiente.',
+    avisoDia: 'Es tu habitual completo de los ' + nombreDia + ': agregá, quitá o cambiá cantidades. Se puede cambiar hasta las 22:00 del día anterior; si la próxima producción ya cerró, vale desde la siguiente.',
     cargarFoto: (id) => cargarFoto(ctx, id), alCancelar: recargar,
     alEnviar: (items, zona) => {
       if (firma(items) === firma(dia.lineas)) { montar(zona, el('div', { class: 'notice info', role: 'status' }, 'No hay cambios para guardar.')); return null; }
@@ -100,7 +100,7 @@ async function abrirNuevo(ctx, libres, avisos, cuerpo, recargar) {
   const arm = armadorPedido({
     productos: cat.productos, iniciales: [],
     titulo: 'Tu habitual nuevo', textoEnviar: 'Guardar', idEnviar: 'btn-guardar-nuevo-dia', idAviso: 'hn-aviso',
-    avisoDia: 'Lo recibís todas las semanas ese día. Se puede cargar hasta las 22:30 del día anterior; si la próxima producción ya cerró, empieza en la siguiente. La salida y el repartidor los asigna Golden.',
+    avisoDia: 'Lo recibís todas las semanas ese día. Se puede cargar hasta las 22:00 del día anterior; si la próxima producción ya cerró, empieza en la siguiente. La salida y el repartidor los asigna Golden.',
     cargarFoto: (id) => cargarFoto(ctx, id), alCancelar: recargar,
     alEnviar: (items, zona) => {
       const dias = elegidos().filter(x => libres.includes(x));

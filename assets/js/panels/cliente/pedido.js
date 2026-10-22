@@ -9,7 +9,7 @@ import { armadorPedido } from './armador.js';
 import { cargarFoto } from './fotos.js';
 import { leer, catalogo, escribir, cabecera, chipOrigen, listaLineas, pesos, hoyART, sumarDias, fmtFecha, FECHA_RE, cant, num, textoOk, diaDe, DIA_TXT, raiz, avisoCli } from './comun.js';
 
-const MOTIVO_TXT = { PRODUCCION_CERRADA: 'La producción de ese día ya cerró o pasó el horario de corte (22:30 del día anterior).', FECHA_PASADA: 'Esa fecha ya pasó.',
+const MOTIVO_TXT = { PRODUCCION_CERRADA: 'La producción de ese día ya cerró o pasó el horario de corte (22:00 del día anterior).', FECHA_PASADA: 'Esa fecha ya pasó.',
   CIERRE_EN_CURSO: 'Golden está cerrando la producción de ese día.', FECHA_INVALIDA: 'Los pedidos se cargan a partir de mañana.' };
 
 export function vistaPedidoFecha(ctx, cont, fechaRuta) {
@@ -20,7 +20,7 @@ export function vistaPedidoFecha(ctx, cont, fechaRuta) {
   const avisos = el('div', { class: 'stack', id: 'pf-aviso' });
   const actual = el('div', { class: 'stack', id: 'pf-actual', 'data-fecha': fecha, 'data-estado': 'cargando' });
   const editor = el('div', { class: 'stack', id: 'pf-editor' });
-  montar(cont, cabecera('Pedido para una fecha', 'Cambiá lo que recibís un día puntual o pedí para un día que no tenés habitual. Se puede cambiar hasta las 22:30 del día anterior.'),
+  montar(cont, cabecera('Pedido para una fecha', 'Cambiá lo que recibís un día puntual o pedí para un día que no tenés habitual. Se puede cambiar hasta las 22:00 del día anterior.'),
     el('div', { class: 'ped-fecha-bar' }, el('label', { for: 'pf-fecha', class: 'ped-fecha-label', text: 'Fecha de entrega' }), iF), avisos,
     el('div', { class: 'card stack' }, actual), editor);
   const cargar = () => leer(ctx, actual, 'mi_pedido_fecha', { fecha }, (d) => {
@@ -30,7 +30,7 @@ export function vistaPedidoFecha(ctx, cont, fechaRuta) {
     if (bEditar) bEditar.addEventListener('click', () => abrirEditor(d));
     const excepcionVacia = d.origen === 'solo_por_hoy' && d.sin_entrega === true;
     const bHoyNo = d.modificable && d.tiene_habitual && !excepcionVacia ? botonDia('btn-hoy-no-pedir', 'Hoy no pedir', 'hoy_no_pedir', 'Hoy no pedir',
-      'Ese día no vas a recibir tu habitual. Tu habitual de los demás días no cambia. Podés volver al habitual hasta las 22:30 del día anterior.', 'Sí, no pedir ese día') : null;
+      'Ese día no vas a recibir tu habitual. Tu habitual de los demás días no cambia. Podés volver al habitual hasta las 22:00 del día anterior.', 'Sí, no pedir ese día') : null;
     const bVolver = d.modificable && d.origen === 'solo_por_hoy' ? botonDia('btn-volver-habitual', 'Volver al habitual', 'anular', 'Volver al habitual',
       'Se deshace el cambio de este día y recibís tu habitual de siempre.', 'Volver al habitual') : null;
     const bCancelar = d.modificable && d.origen === 'pedido_nuevo_no_recurrente' && !d.tiene_habitual ? botonDia('btn-cancelar-pedido', 'Cancelar pedido', 'anular', 'Cancelar pedido',

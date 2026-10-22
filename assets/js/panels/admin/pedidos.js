@@ -54,7 +54,7 @@ const logisticaDia = (ls) => { const l = (ls || [])[0] || {}; return { salida: s
 
 // Mensajes claros por código (el código del backend se muestra siempre al lado). Sin texto propio, se usa el mensaje del backend.
 const MSJ = {
-  PRODUCCION_CERRADA: 'La producción de esa fecha ya está cerrada o pasó el horario de corte (22:30 del día anterior). No se pueden cargar ni cambiar pedidos normales para esa fecha.',
+  PRODUCCION_CERRADA: 'La producción de esa fecha ya está cerrada o pasó el horario de corte (22:00 del día anterior). No se pueden cargar ni cambiar pedidos normales para esa fecha.',
   CIERRE_EN_CURSO: 'Se está cerrando la producción. Los cambios del habitual se pueden hacer cuando termine el cierre.',
   FECHA_INVALIDA: null,
   OPERACION_ID_REUTILIZADO: 'Esa operación ya se había usado con otros datos. Volvé a intentarlo como una operación nueva.',
@@ -723,7 +723,7 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
       titulo: 'Pedido del ' + fmtCorta(fecha), textoEnviar: 'Guardar pedido', idEnviar: 'btn-guardar-pedido', idAviso: 'pn-aviso',
       avisoDia: (d.tiene_habitual
         ? 'Tiene habitual este día: se guarda como “solo por hoy” y reemplaza el habitual únicamente para el ' + fmtMin(fecha) + '.'
-        : 'No tiene habitual este día: se guarda como pedido nuevo para el ' + fmtMin(fecha) + '.') + ' Se puede cambiar hasta las 22:30 del día anterior.',
+        : 'No tiene habitual este día: se guarda como pedido nuevo para el ' + fmtMin(fecha) + '.') + ' Se puede cambiar hasta las 22:00 del día anterior.',
       cargarFoto: cargadorFotosAdmin(ctx, apoyo), alCancelar: alExito,
       alEnviar: (items, zona) => escribir(ctx, zona, 'crear_pedido_normal', { persona_id: pid, rol_pedido: rol, fecha, items }, async (r) => {
         montar(avisos, avisoNegocio(r));
@@ -791,7 +791,7 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
             el('span', { class: 'hab-prod' }, el('span', { text: (str(l.producto) || str(l.detalle_libre) || 'Producto') + ' · ' + cant(l.cantidad, l.unidad) }),
               str(l.detalle_libre) && str(l.producto) ? el('span', { class: 'muted small', text: l.detalle_libre }) : null))));
       })),
-      el('p', { class: 'muted small', text: 'Los cambios del habitual no se pueden hacer mientras se cierra la producción (desde las 22:30 hasta el cierre). Las fechas ya cerradas no cambian.' }));
+      el('p', { class: 'muted small', text: 'Los cambios del habitual no se pueden hacer mientras se cierra la producción (desde las 22:00 hasta el cierre). Las fechas ya cerradas no cambian.' }));
   }
   // Quitar días del habitual (uno o todos): editar_habitual_dia con lista vacía, de a un día. Si uno falla se frena y se avisa.
   async function quitarDias(lista, recargar) {
