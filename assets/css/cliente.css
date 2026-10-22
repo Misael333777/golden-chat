@@ -1,9 +1,9 @@
 /* Golden — diseño aprobado (maqueta) para TODA la página: ingreso, selector de panel, Cliente, Repartidor,
    Admin General y Admin Finanzas. Todo queda limitado a body.cg-activo / .cg / .cgi / .cgs. Solo presentación. */
 body.cg-activo {
-  --cg-bg: #FAF9F6; --cg-white: #FFFEFA; --cg-ink: #29271F; --cg-muted: #79746A; --cg-line: #E9E4DA;
+  --cg-bg: #FAF9F6; --cg-white: #FFFEFA; --cg-ink: #29271F; --cg-muted: #79746A; --cg-line: #C6BAA1;
   --cg-side: #F3EFE5; --cg-gold: #A77729; --cg-gold-btn: #B18031; --cg-gold-soft: #F1E4C6; --cg-activo: #EADEBF; --cg-brown: #6B4C1D;
-  --white: var(--cg-white); --ink: var(--cg-ink); --ink-soft: var(--cg-muted); --line: #E3DCCD; --line-soft: var(--cg-line);
+  --white: var(--cg-white); --ink: var(--cg-ink); --ink-soft: var(--cg-muted); --line: #B5A787; --line-soft: var(--cg-line);
   background: var(--cg-bg); color: var(--cg-ink);
 }
 body.cg-activo::before, body.cg-activo::after { display: none; }
