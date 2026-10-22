@@ -870,12 +870,7 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
           return o;
         };
         const okTxt = (r) => (dias.length > 1 ? 'Habitual guardado para ' + dias.length + ' días (' + nombres(dias) + ').' : (OK_TXT[r.codigo] || 'Listo.'));
-        if (accion === 'configurar_recurrente') {
-          const lineas = [].concat(...dias.map(dia => items.map(it => lineaDe(it, dia))));
-          if (lineas.length > 50) { montar(zona, aviso('error', 'Son demasiados productos para tantos días (máximo 50 en total). Guardá algunos días y después sumá los demás con “Agregar días”.', 'LINEAS_INVALIDAS')); return null; }
-          return escribir(ctx, zona, accion, { persona_id: pid, lineas }, async (r) => { montar(avisos, avisoNegocio(r)); toast(okTxt(r)); await alExito(); });
-        }
-        return (async () => {
+        const agregarDias = async () => {
           const hechos = []; let ultimo = null;
           for (const dia of dias) {
             const r = await escribir(ctx, zona, 'agregar_dia', { persona_id: pid, dia_semana: dia, lineas: items.map(it => lineaDe(it, null)) }, async () => {});
@@ -887,7 +882,18 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
           }
           montar(avisos, avisoNegocio(ultimo)); toast(okTxt(ultimo)); await alExito();
           return ultimo;
-        })();
+        };
+        if (accion === 'configurar_recurrente') {
+          const lineas = [].concat(...dias.map(dia => items.map(it => lineaDe(it, dia))));
+          if (lineas.length > 50) { montar(zona, aviso('error', 'Son demasiados productos para tantos días (máximo 50 en total). Guardá algunos días y después sumá los demás con “Agregar días”.', 'LINEAS_INVALIDAS')); return null; }
+          return (async () => {
+            const r = await escribir(ctx, zona, accion, { persona_id: pid, lineas }, async (r) => { montar(avisos, avisoNegocio(r)); toast(okTxt(r)); await alExito(); });
+            // 22/10: la persona tiene un habitual viejo desactivado (no se ve, pero existe): se arma día por día con agregar_dia.
+            if (r && !r.success && r.codigo === 'PERSONA_ES_RECURRENTE') { montar(zona); return agregarDias(); }
+            return r;
+          })();
+        }
+        return agregarDias();
       },
     });
     marcoHabitual(z, (accion === 'agregar_dia' ? 'Agregar días al habitual — ' : 'Configurar habitual — ') + (persona.nombre || pid),
