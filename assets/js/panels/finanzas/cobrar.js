@@ -2,7 +2,7 @@
 // Lista: acción cuentas_cobrar (conciliación global: saldos por persona). Ficha: acción cuenta_persona (historial con saldo después de cada movimiento).
 // Una persona con varios roles tiene UNA sola cuenta. Nada se recalcula acá.
 import { el, montar, aviso, conBloqueo } from '../../ui.js';
-import { pesos, fmtFecha, sinTilde, estadoCuenta, tile, cabecera, tabla, vacio, leer, operacion, campo, entrada, importeInput, textoArea, selector, numero, texto, conOpcionales, resumenOp, filaDato } from './comun.js';
+import { TIPO, pesos, fmtFecha, sinTilde, estadoCuenta, tile, cabecera, tabla, vacio, leer, operacion, campo, entrada, importeInput, textoArea, selector, numero, texto, conOpcionales, resumenOp, filaDato } from './comun.js';
 import { nuevoCobro } from './dinero.js';
 import { abrirBoleta } from './boleta.js';
 
@@ -17,7 +17,7 @@ export function vistaCobrar(ctx, cont) {
     el('option', { value: 'debe', text: 'Deben' }), el('option', { value: 'a_favor', text: 'Con saldo a favor' }), el('option', { value: 'al_dia', text: 'Al día' }));
   sE.value = filtro.estado;
   const cuerpo = el('div', { class: 'stack', id: 'cc-lista', 'data-estado': 'cargando' });
-  montar(cont, cabecera('Cuentas por cobrar', 'Saldo de cuenta corriente de clientes y repartidores con movimientos. Ordenado por mayor deuda. Abrí una persona para cobrar, ajustar o revertir.'),
+  montar(cont, buscadorCliente(ctx), cabecera('Cuentas por cobrar', 'Saldo de cuenta corriente de clientes y repartidores con movimientos. Ordenado por mayor deuda. Abrí una persona para cobrar, ajustar o revertir.'),
     el('div', { class: 'ped-filtros' }, el('div', { class: 'field search-field' }, iT), sE), cuerpo);
   let datos = null;
   const pintar = () => {
@@ -42,6 +42,30 @@ export function vistaCobrar(ctx, cont) {
   iT.addEventListener('input', () => { filtro.texto = iT.value; pintar(); });
   sE.addEventListener('change', () => { filtro.estado = sE.value; pintar(); });
   leer(ctx, cuerpo, 'cuentas_cobrar', {}, (d) => { datos = d; pintar(); });
+}
+
+// 24/10: buscar CUALQUIER cliente o repartidor (aunque no tenga movimientos) para abrir su ficha: cargar la primera deuda, cobrar o sacar la boleta.
+// Solo consulta cuando se toca "Buscar" (1 ejecucion). Usa la busqueda existente de Finanzas (buscar_personas).
+function buscadorCliente(ctx) {
+  const iBus = el('input', { class: 'input', id: 'cc-buscar-cliente', type: 'search', maxlength: '60', placeholder: 'Nombre del cliente…', 'aria-label': 'Buscar cliente' });
+  const bBus = el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'cc-btn-buscar-cliente' }, 'Buscar');
+  const zRes = el('div', { class: 'stack', id: 'cc-buscar-resultados' });
+  bBus.addEventListener('click', conBloqueo(bBus, async () => {
+    if (iBus.value.trim().length < 2) return montar(zRes, el('p', { class: 'muted small', text: 'Escribí al menos 2 letras.' }));
+    const res = await ctx.pedir(TIPO, 'buscar_personas', { texto: iBus.value.trim() });
+    if (!zRes.isConnected) return;
+    if (res.falla) return montar(zRes, el('p', { class: 'notice error', text: 'No pudimos buscar. Reintentá.' }));
+    if (ctx.revisarFinSesion(res.r)) return;
+    if (!res.r.success) return montar(zRes, el('p', { class: 'notice error', 'data-codigo': res.r.codigo, text: res.r.codigo === 'FILTRO_INVALIDO' ? 'Escribí al menos 2 letras.' : (res.r.mensaje || 'No se pudo buscar.') }));
+    const l = (res.r.datos || {}).personas || [];
+    montar(zRes, !l.length ? el('p', { class: 'muted small', text: 'Sin resultados con cuenta de cliente o repartidor.' })
+      : el('div', { class: 'list' }, l.map(p => el('a', { class: 'btn btn-ghost btn-sm', href: '#/finanzas/cobrar/' + encodeURIComponent(p.persona_id), 'data-abrir-persona': p.persona_id },
+        p.nombre + ((p.roles || []).length ? ' · ' + p.roles.map(r => ROL_TXT[r] || r).join(', ') : '')))));
+  }, 'Buscando…'));
+  iBus.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); bBus.click(); } });
+  return el('div', { class: 'card stack section-card', id: 'cc-buscador' },
+    el('div', null, el('h2', { class: 'section-title', text: 'Buscar cliente' }), el('p', { class: 'card-sub', text: 'Para abrir la cuenta de cualquier cliente o repartidor, aunque todavía no tenga movimientos (cargar deuda, cobrar o sacar la boleta).' })),
+    el('div', { class: 'row' }, iBus, bBus), zRes);
 }
 
 export function vistaCuenta(ctx, cont, pid) {
