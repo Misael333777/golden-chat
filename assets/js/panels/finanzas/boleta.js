@@ -36,20 +36,8 @@ function resumen(d) {
 }
 const periodoTxt = (d) => (d.fecha_desde === d.fecha_hasta ? dmy(d.fecha_desde) : dm(d.fecha_desde) + ' al ' + dmy(d.fecha_hasta));
 
-export const BOLETA_CSS = `
-.gb{background:#fff;color:#241F16;font-family:Manrope,system-ui,-apple-system,'Segoe UI',sans-serif;max-width:420px;margin:0 auto;padding:20px;border:1px solid #C9B37C;border-radius:14px;box-sizing:border-box}
-.gb-head{display:flex;align-items:center;gap:12px;border-bottom:2px solid #C9994A;padding-bottom:12px}
-.gb-head img{width:96px;height:auto}.gb-hd{margin-left:auto;text-align:right}.gb-t{font-family:Fraunces,Georgia,serif;font-size:17px}.gb-m{font-size:11px;color:#6B6350}
-.gb-datos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.gb-datos span{display:block;font-size:11px;color:#6B6350}.gb-datos b{font-size:14px}
-.gb table{width:100%;border-collapse:collapse;font-size:13px}.gb th{text-align:left;font-size:11px;color:#6B6350;border-bottom:1px solid #C9B37C;padding:6px 0;font-weight:600}
-.gb td{padding:7px 0;border-bottom:1px dashed #E2D6B8;vertical-align:top}.gb .n{text-align:right;white-space:nowrap}.gb .f{white-space:nowrap;padding-right:10px;font-weight:600}
-.gb-it{display:flex;justify-content:space-between;gap:8px;padding-right:14px}.gb-it span:last-child{color:#6B6350;white-space:nowrap}
-.gb-tot{margin-top:12px}.gb-r{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:14px}.gb-r b{white-space:nowrap}
-.gb-r.deuda b{color:#A63D2F}.gb-r.favor b{color:#3F7D57}
-.gb-final{margin-top:6px;padding:10px 12px;border-radius:10px;font-size:16px;align-items:center}.gb-final b{font-size:20px}
-.gb-final.pagar{background:#FBF3E3;border:1.5px solid #C9994A}.gb-final.favorfin{background:rgba(63,125,87,.10);border:1.5px solid #3F7D57}
-.gb-nota{font-size:12px;color:#6B6350;margin:8px 0 0}.gb-leg{font-size:10px;color:#9A917B;text-align:center;margin:14px 0 0;border-top:1px solid #EFE6D0;padding-top:8px}
-`;
+// Los estilos de la boleta estan en assets/css/boleta.css (la CSP de la pagina bloquea estilos inline).
+const CSS_URL = 'assets/css/boleta.css';
 
 export function htmlBoleta(d, logoSrc) {
   const r = resumen(d);
@@ -68,7 +56,7 @@ export function htmlBoleta(d, logoSrc) {
 
 function cssEnPagina() {
   if (document.getElementById('gb-css')) return;
-  document.head.appendChild(el('style', { id: 'gb-css', text: BOLETA_CSS }));
+  document.head.appendChild(el('link', { id: 'gb-css', rel: 'stylesheet', href: CSS_URL }));
 }
 
 export function abrirBoleta(ctx, quien) {
@@ -105,7 +93,7 @@ function mostrar(zona, d) {
   const vista = el('div', { id: 'bol-vista', 'data-total': String(d.total_a_pagar) });
   vista.innerHTML = htmlBoleta(d); // todo el texto va escapado en htmlBoleta
   const bImp = el('button', { type: 'button', class: 'btn btn-gold', id: 'bol-imprimir' }, 'Imprimir');
-  const bWsp = el('button', { type: 'button', class: 'btn btn-primary', id: 'bol-compartir', style: 'background:#25D366;border-color:#25D366;color:#fff' }, 'WhatsApp');
+  const bWsp = el('button', { type: 'button', class: 'btn btn-wsp', id: 'bol-compartir' }, 'WhatsApp');
   bImp.addEventListener('click', () => imprimir(d));
   bWsp.addEventListener('click', conBloqueo(bWsp, () => compartir(d), 'Preparando…'));
   montar(zona, vista, el('div', { class: 'row' }, bImp, bWsp),
@@ -115,15 +103,17 @@ function mostrar(zona, d) {
 // Impresión en un iframe oculto: no cambia la página ni necesita ventanas nuevas.
 function imprimir(d) {
   const logo = new URL(LOGO, document.baseURI).href;
-  const doc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Boleta ' + esc(d.persona.nombre) + '</title><style>' + BOLETA_CSS +
-    '@page{margin:12mm}body{margin:0}.gb{border:none;max-width:none}</style></head><body>' + htmlBoleta(d, logo) + '</body></html>';
-  const fr = el('iframe', { title: 'Impresión de boleta', 'aria-hidden': 'true', style: 'position:fixed;right:0;bottom:0;width:0;height:0;border:0' });
+  const css = new URL(CSS_URL, document.baseURI).href;
+  const doc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Boleta ' + esc(d.persona.nombre) + '</title><link rel="stylesheet" href="' + esc(css) + '"></head><body class="gb-print">' + htmlBoleta(d, logo) + '</body></html>';
+  const fr = el('iframe', { title: 'Impresión de boleta', 'aria-hidden': 'true', class: 'gb-frame' });
   document.body.appendChild(fr);
   const w = fr.contentWindow;
   w.document.open(); w.document.write(doc); w.document.close();
-  const lanzar = () => { try { w.focus(); w.print(); } catch (err) { toast('No se pudo abrir la impresión.'); } setTimeout(() => fr.remove(), 60000); };
-  const img = w.document.querySelector('img');
-  if (img && !img.complete) { img.onload = lanzar; img.onerror = lanzar; } else setTimeout(lanzar, 50);
+  let listo = false;
+  const lanzar = () => { if (listo) return; listo = true; try { w.focus(); w.print(); } catch (err) { toast('No se pudo abrir la impresión.'); } setTimeout(() => fr.remove(), 60000); };
+  // Espera la hoja de estilos y el logo (máximo 3 s) antes de imprimir.
+  const esperas = [w.document.querySelector('link'), w.document.querySelector('img')].filter(Boolean).map(x => new Promise(ok => { if (x.tagName === 'IMG' && x.complete) return ok(); x.addEventListener('load', ok); x.addEventListener('error', ok); }));
+  Promise.race([Promise.all(esperas), new Promise(ok => setTimeout(ok, 3000))]).then(() => setTimeout(lanzar, 100));
 }
 
 // Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp.
