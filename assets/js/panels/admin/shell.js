@@ -13,6 +13,7 @@ import { vistaHistorial } from './historial.js';
 import { vistaReportes } from './reportes.js';
 import { vistaConfiguracion } from './configuracion.js';
 import { tarjetaInstalar } from '../../instalar.js';
+import { tarjetaNotificaciones } from '../../notificaciones.js';
 import { tarjetaCierre } from './cierre.js';
 
 const MENU = [
@@ -81,6 +82,7 @@ export function vistaAdmin(ctx, partes) {
         el('div', { class: 'cg-hoy' }, hoy, el('small', { text: 'Hora de Argentina' }))),
       tarjetaCierre(ctx),
       tarjetaInstalar(),
+      tarjetaNotificaciones(ctx, 'admin_general'),
       el('div', { class: 'cg-titulo-seccion' }, el('h2', { text: 'Lo del día' }), el('span', { text: 'Accesos rápidos' })),
       el('div', { class: 'cg-acciones' }, otros.filter(m => m.dia).map(m => atajo(m, 'cg-accion-dia'))),
       el('div', { class: 'cg-titulo-seccion' }, el('h2', { text: 'Gestión' }), el('span', { text: 'Personas, catálogo y datos' })),

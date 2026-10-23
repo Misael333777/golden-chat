@@ -11,6 +11,7 @@ import { vistaCobrar, vistaCuenta } from './cobrar.js';
 import { vistaPagar } from './pagar.js';
 import { vistaExtras } from './extras.js';
 import { tarjetaInstalar } from '../../instalar.js';
+import { tarjetaNotificaciones } from '../../notificaciones.js';
 import { vistaMovimientos } from './movimientos.js';
 import { vistaPendientesFin } from './pendientes.js';
 import { vistaConfiguracion } from './configuracion.js';
@@ -42,7 +43,7 @@ export function vistaFinanzas(ctx, partes) {
   const nav = MENU.map(m => Object.assign({}, m, PRESENTACION[m.id]));
   const avisos = el('div', { class: 'stack', id: 'fin-pendientes-ops' });
   const zonaApp = el('div', { class: 'stack', id: 'fin-instalar' }); // 17/10: instalar como app (solo en Inicio)
-  if (sec === 'inicio') { const t = tarjetaInstalar(); if (t) zonaApp.appendChild(t); }
+  if (sec === 'inicio') { const t = tarjetaInstalar(); if (t) zonaApp.appendChild(t); zonaApp.appendChild(tarjetaNotificaciones(ctx, 'admin_finanzas')); }
   const contenido = el('section', { class: 'stack', id: 'finanzas-contenido' });
   marco(ctx, { panel: 'finanzas', base: '#/finanzas', nav, grupo: nav.find(m => m.id === sec), sec, prefijo: 'fin-', zonas: [avisos, zonaApp], contenido,
     etiqueta: 'Admin Finanzas', rolTxt: 'Admin Finanzas', ariaMenu: 'Menú Admin Finanzas', extraClase: 'admin-page finanzas-page', pie: 'Las cuentas claras de Golden.' });
