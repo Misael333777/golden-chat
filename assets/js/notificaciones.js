@@ -1,6 +1,6 @@
 // Golden — notificaciones en el celular para Admin General y Admin Finanzas (23/10).
 // Web Push estandar: el navegador da una "suscripcion" (direccion + claves) que se guarda en n8n; n8n avisa a esa direccion cuando hay algo para revisar.
-// Solo consulta a n8n al tocar Activar / Desactivar / Enviar prueba (1 ejecucion cada vez). Ver el estado no consulta nada.
+// Solo consulta a n8n al tocar Activar / Desactivar (1 ejecucion cada vez). Ver el estado no consulta nada.
 import { el, toast } from './ui.js';
 
 const CLAVE_PUBLICA = 'BJEaMVLlhM5bDlxK9FfTjhS2Tp06_8WJzQuOGQeAhC20u_LzFyzYxyggrxiqCy1DybK146kHkbAynKBkYq9V85k'; // clave publica VAPID (la privada vive solo en n8n)
@@ -34,7 +34,7 @@ export function tarjetaNotificaciones(ctx, tipo) {
     const r = await pedir('notificaciones_activar', { suscripcion: { endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth } }, dispositivo: dispositivo() });
     if (!r) return pintar();
     if (!r.success) { try { await sub.unsubscribe(); } catch (err) { /* nada */ } toast(r.mensaje || 'No se pudieron activar.'); return pintar(); }
-    toast(r.datos && r.datos.enviados > 0 ? 'Listo: te mandamos una notificación de prueba.' : 'Activadas, pero la prueba no llegó. Probá “Enviar prueba” en un rato.');
+    toast(r.datos && r.datos.enviados > 0 ? 'Listo: te mandamos una notificación de prueba.' : 'Activadas, pero la prueba no llegó. Probá desactivar y volver a activar.');
     pintar();
   }
   async function desactivar() {
@@ -58,7 +58,7 @@ export function tarjetaNotificaciones(ctx, tipo) {
     try { const reg = await registro(); sub = await reg.pushManager.getSubscription(); } catch (err) { sub = null; }
     if (sub && Notification.permission === 'granted') {
       cuerpo.appendChild(el('p', { class: 'small' }, el('span', { class: 'chip ok', text: 'Activadas' }), ' Te avisamos acá cuando haya algo para revisar.'));
-      cuerpo.appendChild(el('div', { class: 'row' }, boton('btn-notif-probar', 'Enviar prueba', 'btn-ghost btn-sm', activar), boton('btn-notif-desactivar', 'Desactivar', 'btn-ghost btn-sm', desactivar)));
+      cuerpo.appendChild(el('div', { class: 'row' }, boton('btn-notif-desactivar', 'Desactivar', 'btn-ghost btn-sm', desactivar)));
     } else {
       cuerpo.appendChild(msg('Te llega un aviso al celular cuando hay algo para revisar (extras, clientes nuevos, consultas, la planilla y Finanzas), aunque la app esté cerrada.', 'muted small'));
       cuerpo.appendChild(boton('btn-notif-activar', 'Activar notificaciones', 'btn-gold', activar));
