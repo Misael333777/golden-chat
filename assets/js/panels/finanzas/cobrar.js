@@ -4,6 +4,7 @@
 import { el, montar, aviso, conBloqueo } from '../../ui.js';
 import { pesos, fmtFecha, sinTilde, estadoCuenta, tile, cabecera, tabla, vacio, leer, operacion, campo, entrada, importeInput, textoArea, selector, numero, texto, conOpcionales, resumenOp, filaDato } from './comun.js';
 import { nuevoCobro } from './dinero.js';
+import { abrirBoleta } from './boleta.js';
 
 const filtro = { texto: '', estado: 'todos' };
 const TIPO_TXT = { saldo_inicial: 'Saldo inicial', cargo: 'Cargo', pago: 'Pago', ajuste_debito: 'Ajuste (débito)', ajuste_credito: 'Ajuste (crédito)', reversion: 'Reversión', anulacion: 'Anulación', otro: 'Movimiento' };
@@ -56,6 +57,7 @@ export function vistaCuenta(ctx, cont, pid) {
     const bCobro = el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'cc-btn-cobro' }, 'Registrar cobro');
     bCobro.addEventListener('click', conBloqueo(bCobro, () => nuevoCobro(ctx, quien, recargar), 'Abriendo…'));
     const bAjuste = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'cc-btn-ajuste', onclick: () => nuevoAjuste(ctx, quien, recargar) }, 'Ajuste');
+    const bBoleta = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'cc-btn-boleta', onclick: () => abrirBoleta(ctx, quien) }, 'Boleta');
     const revertible = (m) => REVERSIBLES.includes(m.tipo) && !m.revertido && !m.revierte_ccm_id;
     montar(cuerpo,
       el('div', { class: 'card stack section-card' },
@@ -64,7 +66,7 @@ export function vistaCuenta(ctx, cont, pid) {
           el('span', { class: 'spacer' }), el('span', { class: 'chips' }, el('span', { class: 'chip ' + e.chip, 'data-estado-cuenta': e.k, text: e.txt }))),
         el('div', { class: 'prd-tiles', id: 'cc-saldos' }, tile('Falta pagar', pesos(d.falta_pagar), 'falta_pagar'), tile('Saldo a favor', pesos(d.saldo_a_favor), 'saldo_a_favor'),
           tile('Último pago', d.ultimo_pago ? pesos(d.ultimo_pago.importe) + ' · ' + fmtFecha(d.ultimo_pago.fecha) : 'Sin pagos', 'ultimo_pago')),
-        el('div', { class: 'row', id: 'cc-acciones' }, bCobro, bAjuste)),
+        el('div', { class: 'row', id: 'cc-acciones' }, bCobro, bAjuste, bBoleta)),
       (d.alertas || []).length ? aviso('error', 'El historial tiene datos a revisar: ' + d.alertas.map(a => a.codigo).join(', ') + '.', 'ALERTA_CUENTA') : null,
       !movs.length ? vacio('Esta cuenta no tiene movimientos.')
         : tabla(['Fecha', 'Movimiento', 'Concepto', 'Importe', 'Saldo después', 'Acción'], movs.map(m => ({ dataset: { ccm: m.ccm_id, tipo: m.tipo, revertido: m.revertido ? 'si' : 'no' },
