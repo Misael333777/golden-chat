@@ -13,6 +13,7 @@ import { vistaHistorial } from './historial.js';
 import { vistaReportes } from './reportes.js';
 import { vistaConfiguracion } from './configuracion.js';
 import { tarjetaInstalar } from '../../instalar.js';
+import { tarjetaCierre } from './cierre.js';
 
 const MENU = [
   { id: 'inicio', txt: 'Inicio', activo: true },
@@ -78,6 +79,7 @@ export function vistaAdmin(ctx, partes) {
         el('div', null, el('span', { class: 'cg-eyebrow', text: 'Admin General' }), el('h1', { text: nombre ? 'Hola, ' + nombre + '.' : 'Hola.' }),
           el('p', { text: 'Todas las secciones de Admin General están habilitadas.' })),
         el('div', { class: 'cg-hoy' }, hoy, el('small', { text: 'Hora de Argentina' }))),
+      tarjetaCierre(ctx),
       tarjetaInstalar(),
       el('div', { class: 'cg-titulo-seccion' }, el('h2', { text: 'Lo del día' }), el('span', { text: 'Accesos rápidos' })),
       el('div', { class: 'cg-acciones' }, otros.filter(m => m.dia).map(m => atajo(m, 'cg-accion-dia'))),
