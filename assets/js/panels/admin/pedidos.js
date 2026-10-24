@@ -14,6 +14,7 @@ import { el, montar, aviso, modal, confirmar, conBloqueo, toast } from '../../ui
 import { avisoFalla, avisoSinConfirmar } from './personas.js';
 import { armadorPedido } from '../cliente/armador.js';
 import { DRIVE_RE } from './imagenes.js';
+import { tarjetaDevoluciones } from './devoluciones.js';
 
 const TIPO = 'admin_general';
 const estado = { fecha: null, tab: 'fecha', texto: '', tipo: 'todos', repartidor: 'todos', salida: 'todas', extra: 'todos' };
@@ -645,7 +646,9 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     const zPedido = el('div', { class: 'card stack', id: 'pp-pedido', 'data-estado': 'cargando' }, el('div', { class: 'skeleton' }));
     const zHab = el('div', { class: 'card stack', id: 'pp-habitual', 'data-estado': 'cargando' }, el('div', { class: 'skeleton' }));
     const zExt = el('div', { class: 'card stack', id: 'pp-extras', 'data-estado': 'cargando' }, el('div', { class: 'skeleton' }));
-    montar(cuerpo, cab, zPedido, zHab, zExt);
+    // 24/10: devoluciones (solo si la persona es cliente o repartidor). No consulta nada hasta tocar el botón.
+    const zDev = persona && roles.length ? tarjetaDevoluciones(ctx, persona, pid, fecha, null) : null;
+    montar(cuerpo, cab, zPedido, zHab, zExt, zDev);
     cuerpo.dataset.estado = 'listo';
     cargarPedido(zPedido); cargarHabitual(zHab); cargarExtras(zExt);
   }
