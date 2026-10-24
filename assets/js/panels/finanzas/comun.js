@@ -43,11 +43,20 @@ export async function leer(ctx, zona, accion, campos, pintar) {
 export const hoyART = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 export const campo = (id, label, input, hint) => el('div', { class: 'field' }, el('label', { for: id, text: label }), input, hint ? el('span', { class: 'hint', text: hint }) : null);
 export const entrada = (id, attrs) => el('input', Object.assign({ class: 'input', id, autocomplete: 'off' }, attrs || {}));
-export const importeInput = (id, valor) => { const i = entrada(id, { type: 'number', min: '0', step: '0.01', inputmode: 'decimal' }); if (valor !== undefined && valor !== null) i.value = String(valor); return i; };
+// 23/10: texto (no type=number) para aceptar el formato argentino "17.000" o "17.000,50" sin que el navegador lo convierta en 17.
+export const importeInput = (id, valor) => { const i = entrada(id, { type: 'text', inputmode: 'decimal', placeholder: 'Ej: 17000' }); if (valor !== undefined && valor !== null) i.value = String(valor); return i; };
 export const fechaInput = (id, valor) => { const i = entrada(id, { type: 'date', max: hoyART() }); i.value = valor || hoyART(); return i; };
 export const textoArea = (id, max, placeholder) => el('textarea', { class: 'input', id, maxlength: String(max || 500), rows: '3', placeholder: placeholder || null });
 export const selector = (id, opciones, valor) => { const s = el('select', { class: 'select', id }, opciones.map(([v, t]) => el('option', { value: v, text: t }))); if (valor !== undefined) s.value = valor; return s; };
-export const numero = (v) => { const t = String(v == null ? '' : v).trim(); if (t === '') return null; const n = Number(t.replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN; };
+// Importes en formato argentino: "17000", "17.000", "17.000,50", "17000,5", "$ 17.000". El punto de miles se ignora; la coma es decimal.
+export const numero = (v) => {
+  let t = String(v == null ? '' : v).trim().replace(/[\s$]/g, '');
+  if (t === '') return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  if (!/^\d+(\.\d+)?$/.test(t)) return NaN;
+  const n = Number(t); return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+};
 export const texto = (v) => { const t = String(v == null ? '' : v).trim(); return t === '' ? null : t; };
 // Agrega a 'campos' solo los opcionales con valor (no se envían vacíos).
 export const conOpcionales = (campos, extra) => { for (const [k, v] of Object.entries(extra)) if (v !== null && v !== undefined && v !== '') campos[k] = v; return campos; };
