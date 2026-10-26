@@ -1,13 +1,13 @@
-// Admin General → Sueldos (26/10). Liquidación mensual por jornada, copiada de la planilla firmada.
+// Admin Finanzas → Cuentas por pagar → Sueldos (26/10). Liquidación mensual por jornada, copiada de la planilla firmada.
 // - Por empleado: días trabajados (Liam: por tipo de jornada) y horas extra del mes.
 // - Mercadería que se llevó (a precio mayorista) y adelantos (sale plata de una cuenta): se descuentan.
-// - Liquidar: arma el sueldo del mes y lo deja en Finanzas para pagar (con los adelantos ya descontados).
+// - Liquidar: arma el sueldo del mes y lo deja en Deudas para pagar (con los adelantos ya descontados).
 // El backend (GOLDEN - Sueldos) valida y calcula todo; acá solo se muestra y se envía.
 import * as ops from '../../ops.js';
 import { el, montar, aviso, modal, confirmar, conBloqueo, toast } from '../../ui.js';
-import { numero } from '../finanzas/comun.js';
+import { numero } from './comun.js';
 
-const TIPO = 'admin_general';
+const TIPO = 'admin_finanzas';
 const MES_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 const hoyART = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
@@ -29,8 +29,8 @@ export function vistaSueldos(ctx, cont) {
   const cuerpo = el('div', { class: 'stack', id: 'sl-cuerpo' });
   montar(cont,
     el('div', { class: 'card stack' },
-      el('div', { class: 'card-head' }, el('h2', { text: 'Sueldos' })),
-      el('p', { class: 'muted small', text: 'Cargá los días y horas extra de la planilla firmada, lo que se llevó cada uno y los adelantos. Del 1 al 10 liquidá el mes que cerró: queda en Finanzas para pagar.' }),
+      el('div', { class: 'card-head' }, el('h2', { text: 'Sueldos del mes' })),
+      el('p', { class: 'muted small', text: 'Cargá los días y horas extra de la planilla firmada, lo que se llevó cada uno y los adelantos. Del 1 al 10 liquidá el mes que cerró: queda como sueldo a pagar (botón Pagar).' }),
       el('div', { class: 'row' }, el('div', { class: 'field' }, el('label', { for: 'sl-mes', text: 'Mes' }), iMes), bVer)),
     avisos, cuerpo);
   let datos = null;
@@ -51,7 +51,7 @@ export function vistaSueldos(ctx, cont) {
   function pintar() {
     const d = datos;
     const lista = d.empleados || [];
-    if (!lista.length) return montar(cuerpo, aviso('info', 'No hay empleados activos. Se cargan en Finanzas → Pagar → Sueldos.'));
+    if (!lista.length) return montar(cuerpo, aviso('info', 'No hay empleados activos. Se cargan con "Nuevo empleado".'));
     montar(cuerpo,
       el('div', { class: 'card row', id: 'sl-resumen' }, el('strong', { text: nombreMes(d.periodo) }), el('span', { class: 'spacer' }),
         el('span', { text: 'Total a pagar: ' }), el('strong', { id: 'sl-total', text: pesos(d.totales && d.totales.a_pagar) })),
@@ -70,7 +70,8 @@ export function vistaSueldos(ctx, cont) {
       ? ['normal ' + fnum(a.dias.normal), '4 hs ' + fnum(a.dias.cuatro_horas), 'reparto ' + fnum(a.dias.reparto)].join(' · ') + ' · extras ' + fnum(a.horas_extra.normal) + ' + ' + fnum(a.horas_extra.reparto) + ' h'
       : fnum(a.dias.normal) + ' días · ' + fnum(a.horas_extra.normal) + ' h extra';
     const b = (txt, cls, fn, id) => { const x = el('button', { type: 'button', class: 'btn btn-sm ' + cls, 'data-emp': e.empleado_id, id }, txt); x.addEventListener('click', fn); return x; };
-    const acciones = liq ? [b('Imprimir', 'btn-ghost', () => imprimir(e, datos.periodo))]
+    const pagar = liq && /^DEU-[0-9A-F]{16}$/.test(liq.deuda_id || '') ? el('a', { class: 'btn btn-sm btn-gold', href: '#/finanzas/pagar/deuda/' + liq.deuda_id, 'data-emp': e.empleado_id }, 'Pagar') : null;
+    const acciones = liq ? [pagar, b('Imprimir', 'btn-ghost', () => imprimir(e, datos.periodo))]
       : [b('Cargar días', 'btn-primary', () => abrirDias(e), 'sl-dias-' + e.empleado_id), b('Se llevó', 'btn-ghost', () => abrirMercaderia(e)), b('Adelanto', 'btn-ghost', () => abrirAdelanto(e)),
         b('Liquidar', 'btn-gold', () => abrirLiquidar(e), 'sl-liq-' + e.empleado_id)];
     const filaNov = (txt, imp, id) => el('div', { class: 'row small' }, el('span', { text: txt }), el('span', { class: 'spacer' }), el('span', { text: '− ' + pesos(imp) }),
@@ -83,7 +84,7 @@ export function vistaSueldos(ctx, cont) {
       (e.lineas || []).length ? el('div', { class: 'stack small' }, e.lineas.map(l => el('div', { class: 'row' }, el('span', { text: l.concepto + ' ' + fnum(l.cantidad) + ' × ' + pesos(l.unitario) }), el('span', { class: 'spacer' }), el('span', { text: pesos(l.importe) })))) : null,
       (e.mercaderia || []).map(m => filaNov('Se llevó ' + ddmm(m.fecha) + ': ' + fnum(m.cantidad) + ' ' + (m.unidad || '') + ' ' + m.producto, m.importe, m.novedad_id)),
       (e.adelantos || []).map(x => filaNov('Adelanto ' + ddmm(x.fecha) + ' (' + x.cuenta + ')', x.importe, x.novedad_id)),
-      el('div', { class: 'row' }, el('strong', { text: liq ? 'Pendiente de pago en Finanzas' : 'A pagar' }), el('span', { class: 'spacer' }), el('strong', { class: 'sl-apagar', text: pesos(t.a_pagar) })),
+      el('div', { class: 'row' }, el('strong', { text: 'A pagar' }), el('span', { class: 'spacer' }), el('strong', { class: 'sl-apagar', text: pesos(t.a_pagar) })),
       (e.avisos || []).length ? aviso('info', e.avisos.join(' ')) : null,
       el('div', { class: 'row' }, acciones));
   }
@@ -203,7 +204,7 @@ export function vistaSueldos(ctx, cont) {
       const bOk = el('button', { type: 'button', class: 'btn btn-gold', id: 'sl-liq-confirmar' }, 'Confirmar liquidación');
       const z2 = el('div', { class: 'stack' });
       montar(zona, detalle(cal),
-        el('p', { class: 'muted small', text: 'Al confirmar queda en Finanzas como sueldo a pagar de ' + nombreMes(datos.periodo) + ' (' + pesos(t.obligacion) + ', con ' + pesos(t.adelantos) + ' ya adelantados). Después no se puede cambiar desde acá.' }),
+        el('p', { class: 'muted small', text: 'Al confirmar queda como sueldo a pagar de ' + nombreMes(datos.periodo) + ' (' + pesos(t.obligacion) + ', con ' + pesos(t.adelantos) + ' ya adelantados). Después no se puede cambiar desde acá.' }),
         bOk, z2);
       bOk.addEventListener('click', conBloqueo(bOk, async () => {
         montar(z2);

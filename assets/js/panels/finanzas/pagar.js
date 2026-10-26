@@ -4,6 +4,7 @@
 // - Sueldos: la obligación del período se carga a mano y congela el sueldo de referencia. Un adelanto es un PAGO ANTICIPADO de esa obligación
 //   (nunca una deuda nueva) y no puede superar el saldo pendiente. Un cambio de sueldo rige hacia adelante y no toca nada ya cargado.
 import { el, montar, aviso, conBloqueo } from '../../ui.js';
+import { vistaSueldos } from './sueldos.js';
 import { pesos, fmtFecha, tile, cabecera, tabla, vacio, leer, operacion, campo, entrada, importeInput, fechaInput, textoArea, selector, numero, texto, conOpcionales,
   resumenOp, filaDato, cuentasActivas, opcionesCuentas, CATEGORIA_TXT, PERIODICIDAD_TXT, hoyART } from './comun.js';
 
@@ -17,16 +18,21 @@ const sueldoTxt = (s) => s ? pesos(s.importe) + ' ' + (PERIODICIDAD_TXT[s.period
 export function vistaPagar(ctx, cont, partes) {
   if (partes[0] === 'deuda') return fichaDeuda(ctx, cont, decodeURIComponent(partes[1] || ''));
   if (partes[0] === 'empleado') return fichaEmpleado(ctx, cont, decodeURIComponent(partes[1] || ''));
-  const tab = partes[0] === 'sueldos' ? 'sueldos' : 'deudas';
+  // 26/10: Sueldos = liquidación del mes (sueldos.js); la lista/fichas de empleados queda en #/finanzas/pagar/empleados.
+  const tab = partes[0] === 'sueldos' || partes[0] === 'empleados' ? 'sueldos' : 'deudas';
+  const verEmpleados = partes[0] === 'empleados';
   const t = (id, txt, href) => el('a', { class: 'btn btn-sm ' + (tab === id ? 'btn-primary' : 'btn-ghost'), role: 'tab', 'aria-selected': String(tab === id), href, 'data-tab': id }, txt);
   const tabs = el('div', { class: 'ped-tabs', role: 'tablist', 'aria-label': 'Cuentas por pagar' }, t('deudas', 'Deudas', '#/finanzas/pagar'), t('sueldos', 'Sueldos', '#/finanzas/pagar/sueldos'));
   const boton = tab === 'deudas' ? el('button', { type: 'button', class: 'btn btn-gold', id: 'btn-nueva-deuda', onclick: () => nuevaDeuda(ctx) }, 'Nueva deuda')
-    : el('button', { type: 'button', class: 'btn btn-gold', id: 'btn-nuevo-empleado', onclick: () => nuevoEmpleado(ctx) }, 'Nuevo empleado');
+    : el('div', { class: 'row' }, verEmpleados ? el('a', { class: 'btn btn-ghost', href: '#/finanzas/pagar/sueldos', id: 'btn-sueldos-mes' }, 'Sueldos del mes')
+        : el('a', { class: 'btn btn-ghost', href: '#/finanzas/pagar/empleados', id: 'btn-fichas-empleados' }, 'Fichas de empleados'),
+      el('button', { type: 'button', class: 'btn btn-gold', id: 'btn-nuevo-empleado', onclick: () => nuevoEmpleado(ctx) }, 'Nuevo empleado'));
   const head = cabecera('Cuentas por pagar', 'Deudas con proveedores y otros, y sueldos de empleados. Se registran como gasto recién cuando se pagan.', boton);
   head.appendChild(tabs);
   const cuerpo = el('div', { class: 'stack', id: tab === 'deudas' ? 'cp-deudas' : 'cp-sueldos', 'data-estado': 'cargando' });
   montar(cont, head, cuerpo);
-  return tab === 'deudas' ? listaDeudas(ctx, cuerpo) : listaEmpleados(ctx, cuerpo);
+  if (tab === 'deudas') return listaDeudas(ctx, cuerpo);
+  return verEmpleados ? listaEmpleados(ctx, cuerpo) : vistaSueldos(ctx, cuerpo);
 }
 
 // ======================= DEUDAS =======================
@@ -160,7 +166,7 @@ function listaEmpleados(ctx, cuerpo) {
         el('span', { class: 'pc-cell cc-saldo', text: pesos(x.saldo_pendiente) }),
         el('span', { class: 'pc-cell chips' }, el('span', { class: 'chip ' + (x.obligaciones_pendientes ? 'warn' : ''), text: (x.obligaciones_pendientes || 0) + ' sueldo(s) por pagar' })),
         el('span', { class: 'pc-cell pc-acciones' }, el('span', { class: 'pc-ver', 'aria-hidden': 'true', text: 'Ver' }))))),
-      el('p', { class: 'muted small', text: 'Los sueldos no se generan solos: cada sueldo del período se carga a mano desde la ficha del empleado.' }),
+      el('p', { class: 'muted small', text: 'El sueldo de cada mes se calcula y liquida en "Sueldos del mes". Desde la ficha se carga o cambia el sueldo por día.' }),
       bajas.length ? el('details', { class: 'emp-bajas', id: 'emp-bajas' }, el('summary', { text: 'Dados de baja (' + bajas.length + ')' }),
         el('div', { class: 'list' }, bajas.map(x => el('a', { class: 'person-card cc-row', href: '#/finanzas/pagar/empleado/' + encodeURIComponent(x.empleado_id), 'data-empleado-baja': x.empleado_id },
           el('span', { class: 'pc-cell' }, el('span', { class: 'person-name', text: x.nombre }),
@@ -178,13 +184,13 @@ function nuevoEmpleado(ctx) {
     form: el('div', { class: 'stack' }, el('div', { class: 'form-grid two' }, campo('em-nombre', 'Nombre', iNom), campo('em-ident', 'Identificación (opcional)', iId)), campo('em-obs', 'Observación (opcional)', iObs)),
     datos: () => conOpcionales({ nombre: iNom.value }, { identificacion: texto(iId.value), observacion: texto(iObs.value) }),
     resumen: (d) => { const e = d.empleado || {}; return resumenOp([filaDato('Nombre', e.nombre), e.identificacion ? filaDato('Identificación', e.identificacion) : null], 'Después cargá su sueldo vigente.'); },
-    ok: (r) => ctx.ir(r.datos && EMP.test(r.datos.empleado_id || '') ? '#/finanzas/pagar/empleado/' + r.datos.empleado_id : '#/finanzas/pagar/sueldos'),
+    ok: (r) => ctx.ir(r.datos && EMP.test(r.datos.empleado_id || '') ? '#/finanzas/pagar/empleado/' + r.datos.empleado_id : '#/finanzas/pagar/empleados'),
   });
 }
 
 function fichaEmpleado(ctx, cont, eid) {
   const cuerpo = el('div', { class: 'stack', id: 'emp-ficha', 'data-estado': 'cargando', 'data-empleado': eid });
-  montar(cont, el('a', { class: 'btn btn-ghost btn-sm back-link', href: '#/finanzas/pagar/sueldos', id: 'emp-volver' }, 'Volver a Sueldos'), cuerpo);
+  montar(cont, el('a', { class: 'btn btn-ghost btn-sm back-link', href: '#/finanzas/pagar/empleados', id: 'emp-volver' }, 'Volver a empleados'), cuerpo);
   if (!EMP.test(eid)) return montar(cuerpo, aviso('error', 'El empleado indicado no es válido.', 'EMPLEADO_INEXISTENTE'));
   leer(ctx, cuerpo, 'empleado', { empleado_id: eid }, (d) => {
     const e = d.empleado || {}; const hist = (d.historial_sueldos || []).slice().reverse(); const obls = (d.obligaciones || []).slice().sort((a, b) => String(b.periodo).localeCompare(String(a.periodo)));
@@ -223,7 +229,7 @@ function darDeBaja(ctx, e, alTerminar) {
     confirmacion: 'El empleado deja de aparecer en las listas y no se le pueden cargar sueldos nuevos. Su historial (sueldos, deudas y pagos) se conserva y se puede restaurar.',
     form: el('div', { class: 'stack' }, resumenOp([filaDato('Empleado', e.nombre)]), campo('emp-baja-motivo', 'Motivo de la baja', iMot)),
     datos: () => { const m = texto(iMot.value); if (!m || m.length < 3) return { __error: 'Escribí el motivo de la baja.' }; return { empleado_id: e.empleado_id, motivo: m }; },
-    ok: () => ctx.ir('#/finanzas/pagar/sueldos'),
+    ok: () => ctx.ir('#/finanzas/pagar/empleados'),
   });
 }
 function restaurar(ctx, e, alTerminar) {

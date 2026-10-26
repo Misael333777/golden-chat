@@ -11,7 +11,6 @@ import { vistaProduccion } from './produccion.js';
 import { vistaPendientes } from './pendientes.js';
 import { vistaHistorial } from './historial.js';
 import { vistaReportes } from './reportes.js';
-import { vistaSueldos } from './sueldos.js';
 import { vistaConfiguracion } from './configuracion.js';
 import { tarjetaInstalar } from '../../instalar.js';
 import { tarjetaNotificaciones } from '../../notificaciones.js';
@@ -27,7 +26,6 @@ const MENU = [
   { id: 'pendientes', txt: 'Pendientes', activo: true },
   { id: 'historial', txt: 'Historial', activo: true },
   { id: 'reportes', txt: 'Reportes', activo: true },
-  { id: 'sueldos', txt: 'Sueldos', activo: true },
   { id: 'configuracion', txt: 'Configuración', activo: true },
 ];
 // Presentación del menú (ícono, subtítulo y descripción). No cambia qué secciones existen ni sus rutas.
@@ -41,7 +39,6 @@ const PRESENTACION = {
   pendientes: { ico: 'alerta', sub: 'Lo que requiere atención', dia: true, desc: 'Lo que necesita intervención.' },
   historial: { ico: 'reloj', sub: 'Quién hizo qué', desc: 'Quién hizo qué y cuándo.' },
   reportes: { ico: 'grafico', sub: 'Resúmenes por período', desc: 'Resúmenes por período.' },
-  sueldos: { ico: 'personas', sub: 'Días, adelantos y liquidación', desc: 'Días trabajados, lo que se llevan, adelantos y liquidación del mes.' },
   configuracion: { ico: 'ajustes', sub: 'Datos generales', desc: 'Datos generales de Golden y Admin Finanzas.' },
 };
 export const SECCIONES = {
@@ -96,7 +93,6 @@ export function vistaAdmin(ctx, partes) {
   if (sec === 'pendientes') return vistaPendientes(ctx, contenido);
   if (sec === 'historial') return vistaHistorial(ctx, contenido);
   if (sec === 'reportes') return vistaReportes(ctx, contenido);
-  if (sec === 'sueldos') return vistaSueldos(ctx, contenido);
   if (sec === 'configuracion' && partes[1] === 'admin-finanzas') return partes[2] ? vistaFicha(ctx, contenido, SECCIONES.admin_finanzas, decodeURIComponent(partes[2])) : vistaPersonas(ctx, contenido, SECCIONES.admin_finanzas);
   if (sec === 'configuracion') return vistaConfiguracion(ctx, contenido);
   if (sec === 'catalogo') return partes[1] ? vistaProducto(ctx, contenido, decodeURIComponent(partes[1])) : vistaCatalogo(ctx, contenido);
