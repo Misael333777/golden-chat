@@ -26,9 +26,11 @@ export function vistaInicio(ctx, cont) {
     montar(periodo,
       el('div', { class: 'prd-tiles', id: 'fin-tiles' },
         tile('Saldo disponible', pesos(d.saldo_total_disponible), 'disponible'), tile('Ingresos del mes', pesos(d.ingresos), 'ingresos'),
-        tile('Gastos del mes', pesos(d.gastos), 'gastos'), tile('Resultado neto', pesos(d.resultado_neto), 'neto'),
+        tile('Gastos del mes', pesos(d.gastos), 'gastos'), tile('Resultado del mes', pesos(d.resultado_neto), 'resultado_mes'),
+        // 26/10 (pedido del usuario): Neto = toda la plata de las cuentas menos lo que se debe (deudas y sueldos liquidados sin pagar).
+        tile('Neto (plata − deudas)', typeof d.saldo_total_disponible === 'number' && typeof d.cuentas_por_pagar === 'number' ? pesos(Math.round((d.saldo_total_disponible - d.cuentas_por_pagar) * 100) / 100) : '—', 'neto'),
         tile('Cuentas por pagar', pesos(d.cuentas_por_pagar), 'por_pagar'), tile('Revisiones pendientes', String(d.revisiones_pendientes ?? 0), 'revisiones')),
-      el('p', { class: 'muted small', text: 'Las transferencias entre cuentas no son ingreso ni gasto. Los sueldos cuentan como gasto cuando se pagan (adelantos y pagos), no al cargarlos.' }),
+      el('p', { class: 'muted small', text: 'Neto = saldo disponible − cuentas por pagar. Resultado del mes = ingresos − gastos del mes. Las transferencias entre cuentas no son ingreso ni gasto; los sueldos cuentan como gasto cuando se pagan.' }),
       el('h3', { text: 'Saldo por cuenta' }),
       !cuentas.length ? vacio('No hay cuentas financieras.') : tabla(['Cuenta', 'Estado', 'Saldo'], cuentas.map(c => ({ dataset: { cuenta: c.cuenta_id },
         celdas: [c.nombre, c.activa ? 'Activa' : 'Inactiva', pesos(c.saldo)] })), 'fin-cuentas'),
