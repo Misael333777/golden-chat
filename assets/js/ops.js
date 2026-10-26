@@ -25,7 +25,7 @@ const ACCIONES = ['crear_persona', 'editar_persona', 'agregar_rol', 'quitar_rol'
   // Etapa 4: habitual multiproducto por día, 'Hoy no pedir' y 'Volver al habitual' / 'Cancelar pedido' (cliente: anular; Admin General: anular_pedido_fecha).
   'editar_habitual_dia', 'hoy_no_pedir', 'anular', 'anular_pedido_fecha',
   // 24/10: devoluciones (Admin General).
-  'registrar_devolucion'].concat(ACCIONES_FINANZAS);
+  'registrar_devolucion', 'cambiar_lista_precio', 'sueldos_asistencia', 'sueldos_mercaderia', 'sueldos_adelanto', 'sueldos_anular', 'sueldos_liquidar'].concat(ACCIONES_FINANZAS);
 // Tipo de la Web API con el que se envió cada operación (se guarda para reintentarla en el MISMO panel). Las entradas viejas sin tipo
 // se asignan como antes: escrituras de Finanzas -> admin_finanzas; el resto -> admin_general.
 const TIPOS = ['admin_general', 'admin_finanzas', 'pedido', 'recurrente', 'extra', 'soporte'];
