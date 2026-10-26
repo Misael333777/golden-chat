@@ -327,6 +327,13 @@ export function vistaFicha(ctx, cont, s, pid) {
     const iNombre = el('input', { class: 'input', id: 'editar-nombre', maxlength: '120', value: str(p.nombre) || '' });
     const iTel = el('input', { class: 'input', id: 'editar-telefono', maxlength: '30', inputmode: 'tel', value: str(p.telefono) || '' });
     const iDir = el('input', { class: 'input', id: 'editar-direccion', maxlength: '200', value: str(p.direccion) || '' });
+    // Lista de precio: solo para quien tiene rol cliente (el repartidor siempre paga mayorista). El backend valida y audita el cambio.
+    const esCliente = rolesDe(p).some(r => r.rol === 'cliente');
+    const actualLista = str(p.lista_precio) || '';
+    const iLista = esCliente ? el('select', { class: 'input', id: 'editar-lista' },
+      actualLista ? null : el('option', { value: '', text: 'Sin definir' }),
+      el('option', { value: 'minorista', text: 'Minorista' }), el('option', { value: 'mayorista', text: 'Mayorista' })) : null;
+    if (iLista) iLista.value = actualLista;
     const zona = el('div', { class: 'stack', id: 'editar-aviso' });
     const boton = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar' }, 'Guardar cambios');
     const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
@@ -334,7 +341,9 @@ export function vistaFicha(ctx, cont, s, pid) {
         el('div', { class: 'field' }, el('label', { for: 'editar-nombre', text: 'Nombre' }), iNombre),
         el('div', { class: 'field' }, el('label', { for: 'editar-telefono', text: 'Teléfono' }), iTel, el('span', { class: 'hint', text: 'Dejalo vacío para quitarlo.' })),
         el('div', { class: 'field' }, el('label', { for: 'editar-direccion', text: 'Dirección' }), iDir, el('span', { class: 'hint', text: 'Dejala vacía para quitarla.' })),
-        el('p', { class: 'muted small', text: 'La lista de precio y el código de acceso no se modifican desde acá.' })),
+        iLista ? el('div', { class: 'field' }, el('label', { for: 'editar-lista', text: 'Lista de precio' }), iLista,
+          el('span', { class: 'hint', text: 'Vale para los pedidos y cobros desde ahora; lo anterior no cambia.' })) : null,
+        el('p', { class: 'muted small', text: 'El código de acceso no se modifica desde acá.' })),
       boton, zona);
     const m = modal('Editar datos', form);
     async function enviar(campos) {
@@ -349,6 +358,7 @@ export function vistaFicha(ctx, cont, s, pid) {
       const campos = { persona_id: p.persona_id };
       const cambio = (k, nuevo) => { const viejo = str(p[k]) || ''; if (nuevo !== viejo) campos[k] = nuevo === '' ? null : nuevo; };
       cambio('nombre', iNombre.value.trim()); cambio('telefono', iTel.value.trim()); cambio('direccion', iDir.value.trim());
+      if (iLista && iLista.value && iLista.value !== actualLista) campos.lista_precio = iLista.value;
       if (Object.keys(campos).length === 1) { montar(zona, aviso('info', 'No hay cambios para guardar.')); return; }
       await enviar(campos);
     }, 'Guardando…'));
