@@ -330,7 +330,7 @@ export function vistaFicha(ctx, cont, s, pid) {
     // Lista de precio: solo para quien tiene rol cliente (el repartidor siempre paga mayorista). El backend valida y audita el cambio.
     const esCliente = rolesDe(p).some(r => r.rol === 'cliente');
     const actualLista = str(p.lista_precio) || '';
-    const iLista = esCliente ? el('select', { class: 'input', id: 'editar-lista' },
+    const iLista = esCliente ? el('select', { class: 'select', id: 'editar-lista' },
       actualLista ? null : el('option', { value: '', text: 'Sin definir' }),
       el('option', { value: 'minorista', text: 'Minorista' }), el('option', { value: 'mayorista', text: 'Mayorista' })) : null;
     if (iLista) iLista.value = actualLista;
@@ -346,9 +346,21 @@ export function vistaFicha(ctx, cont, s, pid) {
         el('p', { class: 'muted small', text: 'El código de acceso no se modifica desde acá.' })),
       boton, zona);
     const m = modal('Editar datos', form);
-    async function enviar(campos) {
-      const res = await ops.ejecutar(ctx.base(TIPO), 'editar_persona', campos);
-      if (res.sinConfirmar) return montar(zona, avisoSinConfirmar(res.falla, res.operacion_id, () => enviar(campos), () => { ops.descartar('editar_persona', campos); montar(zona); }));
+    // Datos (editar_persona) y lista de precio (cambiar_lista_precio) son dos operaciones separadas del backend; si cambian las dos, van en orden.
+    async function enviar(campos, listaNueva) {
+      if (Object.keys(campos).length > 1) {
+        const res = await ops.ejecutar(ctx.base(TIPO), 'editar_persona', campos);
+        if (res.sinConfirmar) return montar(zona, avisoSinConfirmar(res.falla, res.operacion_id, () => enviar(campos, listaNueva), () => { ops.descartar('editar_persona', campos); montar(zona); }));
+        if (ctx.revisarFinSesion(res.r)) return m.cerrar();
+        if (!res.r.success) return montar(zona, avisoBackend(res.r));
+        if (!listaNueva) { m.cerrar(); montar(avisos, avisoBackend(res.r)); return cargar(); }
+      }
+      return enviarLista(listaNueva);
+    }
+    async function enviarLista(lista) {
+      const cl = { persona_id: p.persona_id, lista_precio: lista };
+      const res = await ops.ejecutar(ctx.base(TIPO), 'cambiar_lista_precio', cl);
+      if (res.sinConfirmar) return montar(zona, avisoSinConfirmar(res.falla, res.operacion_id, () => enviarLista(lista), () => { ops.descartar('cambiar_lista_precio', cl); montar(zona); }));
       if (ctx.revisarFinSesion(res.r)) return m.cerrar();
       if (res.r.success) { m.cerrar(); montar(avisos, avisoBackend(res.r)); return cargar(); }
       montar(zona, avisoBackend(res.r));
@@ -358,9 +370,9 @@ export function vistaFicha(ctx, cont, s, pid) {
       const campos = { persona_id: p.persona_id };
       const cambio = (k, nuevo) => { const viejo = str(p[k]) || ''; if (nuevo !== viejo) campos[k] = nuevo === '' ? null : nuevo; };
       cambio('nombre', iNombre.value.trim()); cambio('telefono', iTel.value.trim()); cambio('direccion', iDir.value.trim());
-      if (iLista && iLista.value && iLista.value !== actualLista) campos.lista_precio = iLista.value;
-      if (Object.keys(campos).length === 1) { montar(zona, aviso('info', 'No hay cambios para guardar.')); return; }
-      await enviar(campos);
+      const listaNueva = (iLista && iLista.value && iLista.value !== actualLista) ? iLista.value : null;
+      if (Object.keys(campos).length === 1 && !listaNueva) { montar(zona, aviso('info', 'No hay cambios para guardar.')); return; }
+      await enviar(campos, listaNueva);
     }, 'Guardando…'));
   }
 
