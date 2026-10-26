@@ -64,6 +64,12 @@ export const filaDato = (label, valor, attr) => el('div', { class: 'rep-fila rep
 export const resumenOp = (filas, nota) => el('div', { class: 'stack', 'data-resumen-op': 'true' }, el('div', { class: 'tabla rep-tabla op-resumen' }, filas.filter(Boolean)), nota ? el('p', { class: 'muted small', text: nota }) : null);
 export const TIPO_CUENTA_TXT = { efectivo: 'Efectivo', banco: 'Banco', billetera: 'Billetera virtual', otro: 'Otro' };
 export const CATEGORIA_TXT = { proveedor: 'Proveedor', servicio: 'Servicio', alquiler: 'Alquiler', impuesto: 'Impuesto', otro: 'Otro', empleado: 'Sueldos' };
+// 26/10: el concepto que guarda el backend para un cobro trae un código interno ("Pago cuenta corriente PAG-WEB-…"): se muestra legible.
+export const conceptoMov = (m, conPersona = true) => {
+  const c = (m && typeof m.concepto === 'string') ? m.concepto.trim() : '';
+  if (/^Pago cuenta corriente\b/i.test(c)) return 'Cobro' + (conPersona && m.persona ? ' de ' + m.persona : '');
+  return c.replace(/\s+[A-Z]{2,4}-WEB-[0-9a-f-]{36}$/i, '') || (m && m.categoria) || '—';
+};
 export const PERIODICIDAD_TXT = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual' };
 
 const MSJ = { CUENTA_CON_SALDO: 'La cuenta tiene saldo distinto de cero: primero transferí el saldo a otra cuenta.', SALDO_INSUFICIENTE: 'La cuenta de origen no tiene saldo suficiente.',

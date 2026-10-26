@@ -4,7 +4,7 @@
 // Transferencia: mismo importe sale de origen y entra en destino; no es ingreso ni gasto (no cambia el resultado neto).
 import { el, montar, conBloqueo } from '../../ui.js';
 import { pesos, fmtFecha, cabecera, tabla, vacio, leer, operacion, campo, entrada, importeInput, fechaInput, textoArea, selector, numero, texto, conOpcionales,
-  resumenOp, filaDato, cuentasActivas, opcionesCuentas, CATEGORIA_TXT, TIPO } from './comun.js';
+  resumenOp, filaDato, cuentasActivas, opcionesCuentas, CATEGORIA_TXT, TIPO, conceptoMov } from './comun.js';
 
 const CATEGORIAS_GASTO = ['proveedor', 'servicio', 'alquiler', 'impuesto', 'otro'];
 
@@ -13,7 +13,7 @@ function recientes(ctx, zona, tipo, vacioTxt) {
     const l = d.items || [];
     montar(zona, el('h3', { text: 'Del mes en curso' }),
       !l.length ? vacio(vacioTxt) : tabla(['Concepto', 'Fecha', 'Cuenta', 'Persona', 'Importe'], l.map(m => ({ dataset: { mov: m.id },
-        celdas: [m.concepto || m.categoria || '—', fmtFecha(m.fecha), [m.cuenta_origen, m.cuenta_destino].filter(Boolean).join(' → ') || '—', m.persona || '—', pesos(m.importe)] })), 'mov-' + tipo),
+        celdas: [conceptoMov(m, false), fmtFecha(m.fecha), [m.cuenta_origen, m.cuenta_destino].filter(Boolean).join(' → ') || '—', m.persona || '—', pesos(m.importe)] })), 'mov-' + tipo),
       d.total > l.length ? el('a', { class: 'btn btn-ghost btn-sm', href: '#/finanzas/movimientos' }, 'Ver todos en Movimientos') : null);
   });
 }

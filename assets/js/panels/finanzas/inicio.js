@@ -1,7 +1,7 @@
 // Admin Finanzas → Inicio. Todo lo que se muestra lo calcula el backend (Consultas PROD): saldos por cuenta desde movimientos,
 // ingresos / gastos / resultado neto del mes (las transferencias no cuentan), cuentas por cobrar y por pagar, revisiones y extras pendientes.
 import { el, montar } from '../../ui.js';
-import { pesos, fmtFecha, tile, tabla, vacio, leer, hoyART } from './comun.js';
+import { pesos, fmtFecha, tile, tabla, vacio, leer, hoyART, conceptoMov } from './comun.js';
 
 export function vistaInicio(ctx, cont) {
   const hoy = hoyART();
@@ -36,7 +36,7 @@ export function vistaInicio(ctx, cont) {
         celdas: [c.nombre, c.activa ? 'Activa' : 'Inactiva', pesos(c.saldo)] })), 'fin-cuentas'),
       el('h3', { text: 'Movimientos recientes' }),
       !recientes.length ? vacio('Todavía no hay movimientos de dinero.') : tabla(['Concepto', 'Fecha', 'Tipo', 'Cuenta', 'Importe'], recientes.map(m => ({ dataset: { mov: m.movimiento_id },
-        celdas: [m.concepto || m.categoria || '—', fmtFecha(m.fecha), m.tipo_label || m.tipo, [m.cuenta_origen, m.cuenta_destino].filter(Boolean).join(' → ') || '—', pesos(m.monto)] })), 'fin-recientes'));
+        celdas: [conceptoMov(m), fmtFecha(m.fecha), m.tipo_label || m.tipo, [m.cuenta_origen, m.cuenta_destino].filter(Boolean).join(' → ') || '—', pesos(m.monto)] })), 'fin-recientes'));
   });
   leer(ctx, cuerpo, 'resumen_finanzas', {}, (d) => {
     montar(cuerpo,

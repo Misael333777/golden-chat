@@ -2,7 +2,7 @@
 // Lista: acción cuentas_cobrar (conciliación global: saldos por persona). Ficha: acción cuenta_persona (historial con saldo después de cada movimiento).
 // Una persona con varios roles tiene UNA sola cuenta. Nada se recalcula acá.
 import { el, montar, aviso, conBloqueo } from '../../ui.js';
-import { TIPO, pesos, fmtFecha, sinTilde, estadoCuenta, tile, cabecera, tabla, vacio, leer, operacion, campo, entrada, importeInput, textoArea, selector, numero, texto, conOpcionales, resumenOp, filaDato } from './comun.js';
+import { TIPO, pesos, fmtFecha, sinTilde, estadoCuenta, tile, cabecera, tabla, vacio, leer, operacion, campo, entrada, importeInput, textoArea, selector, numero, texto, conOpcionales, resumenOp, filaDato, conceptoMov } from './comun.js';
 import { nuevoCobro } from './dinero.js';
 import { abrirBoleta } from './boleta.js';
 
@@ -95,7 +95,7 @@ export function vistaCuenta(ctx, cont, pid) {
       !movs.length ? vacio('Esta cuenta no tiene movimientos.')
         : tabla(['Fecha', 'Movimiento', 'Concepto', 'Importe', 'Saldo después', 'Acción'], movs.map(m => ({ dataset: { ccm: m.ccm_id, tipo: m.tipo, revertido: m.revertido ? 'si' : 'no' },
           celdas: [fmtFecha(m.fecha), el('span', null, TIPO_TXT[m.tipo] || 'Movimiento', m.revertido ? el('span', { class: 'chip off', text: 'Revertido' }) : null, m.revierte_ccm_id ? el('span', { class: 'chip', text: 'Revierte otro' }) : null),
-            [...new Set([m.concepto, ORIGEN_TXT[m.origen]].filter(Boolean))].concat(m.motivo ? ['Motivo: ' + m.motivo] : []).join(' · ') || '—',
+            [...new Set([m.concepto ? conceptoMov(m, false) : null, ORIGEN_TXT[m.origen]].filter(Boolean))].concat(m.motivo ? ['Motivo: ' + m.motivo] : []).join(' · ') || '—',
             (m.importe_firmado > 0 ? '+' : '−') + pesos(Math.abs(m.importe_firmado)), pesos(m.saldo_despues),
             revertible(m) ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'revertir', onclick: () => revertir(ctx, m, recargar) }, 'Revertir') : '—'] })), 'cc-movimientos'),
       el('p', { class: 'muted small', text: '“+” aumenta lo que la persona debe; “−” lo reduce o genera saldo a favor. Los movimientos no se editan ni se borran: una corrección agrega una reversión o un ajuste.' }));
