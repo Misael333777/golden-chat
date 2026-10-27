@@ -1,9 +1,13 @@
 // Admin Finanzas → Inicio. Todo lo que se muestra lo calcula el backend (Consultas PROD): saldos por cuenta desde movimientos,
 // ingresos / gastos / resultado neto del mes (las transferencias no cuentan), cuentas por cobrar y por pagar, revisiones y extras pendientes.
 import { el, montar } from '../../ui.js';
-import { pesos, fmtFecha, tile, tabla, vacio, leer, hoyART, conceptoMov } from './comun.js';
+import { pesos as pesosReal, fmtFecha, tile, tabla, vacio, leer, hoyART, conceptoMov } from './comun.js';
 
-export function vistaInicio(ctx, cont) {
+// 27/10 (pedido del usuario): por seguridad los montos de Inicio arrancan ocultos; el botón del ojo los muestra/oculta (no se guarda).
+export function vistaInicio(ctx, cont, mostrar = false) {
+  const pesos = (v) => (mostrar ? pesosReal(v) : '$ ••••••');
+  const bOjo = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'fin-ojo', 'aria-pressed': String(mostrar), title: mostrar ? 'Ocultar montos' : 'Mostrar montos',
+    onclick: () => vistaInicio(ctx, cont, !mostrar) }, (mostrar ? '🙈 Ocultar montos' : '👁 Mostrar montos'));
   const hoy = hoyART();
   const desde = hoy.slice(0, 8) + '01';
   const periodo = el('div', { class: 'stack', id: 'fin-periodo', 'data-estado': 'cargando' });
@@ -12,7 +16,7 @@ export function vistaInicio(ctx, cont) {
     el('span', { class: 'shortcut-ico', 'aria-hidden': 'true' }), el('h3', { text: titulo }), el('p', { class: 'muted small', text: texto }),
     el('a', { class: 'btn ' + clase, href: '#/finanzas/' + id }, boton));
   montar(cont, el('div', { class: 'card stack card-welcome' },
-    el('div', null, el('span', { class: 'eyebrow', text: 'Resumen' }), el('h2', { text: 'Inicio' }),
+    el('div', null, el('div', { class: 'row' }, el('span', { class: 'eyebrow', text: 'Resumen' }), el('span', { class: 'spacer' }), bOjo), el('h2', { text: 'Inicio' }),
       el('p', { class: 'muted', text: 'Mes en curso (' + fmtFecha(desde) + ' al ' + fmtFecha(hoy) + '). Todo se calcula desde los movimientos registrados.' })),
     periodo, cuerpo,
     el('div', { class: 'shortcut-grid' },
