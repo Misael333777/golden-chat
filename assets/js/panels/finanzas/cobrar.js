@@ -17,8 +17,13 @@ export function vistaCobrar(ctx, cont) {
     el('option', { value: 'debe', text: 'Deben' }), el('option', { value: 'a_favor', text: 'Con saldo a favor' }), el('option', { value: 'al_dia', text: 'Al día' }));
   sE.value = filtro.estado;
   const cuerpo = el('div', { class: 'stack', id: 'cc-lista', 'data-estado': 'cargando' });
+  // 27/10 (pedido del usuario): montos ocultos al entrar; el ojo los muestra/oculta sin volver a pedir datos.
+  let mostrar = false;
+  const $ = (v) => (mostrar ? pesos(v) : '$ ••••••');
+  const bOjo = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'cc-ojo', 'aria-pressed': 'false', text: '👁 Mostrar montos' });
+  bOjo.addEventListener('click', () => { mostrar = !mostrar; bOjo.textContent = mostrar ? '🙈 Ocultar montos' : '👁 Mostrar montos'; bOjo.setAttribute('aria-pressed', String(mostrar)); pintar(); });
   montar(cont, buscadorCliente(ctx), cabecera('Cuentas por cobrar', 'Saldo de cuenta corriente de clientes y repartidores con movimientos. Ordenado por mayor deuda. Abrí una persona para cobrar, ajustar o revertir.'),
-    el('div', { class: 'ped-filtros' }, el('div', { class: 'field search-field' }, iT), sE), cuerpo);
+    el('div', { class: 'ped-filtros' }, el('div', { class: 'field search-field' }, iT), sE, bOjo), cuerpo);
   let datos = null;
   const pintar = () => {
     if (!datos) return;
@@ -27,13 +32,13 @@ export function vistaCobrar(ctx, cont) {
     const vis = todas.filter(c => (filtro.estado === 'todos' || estadoCuenta(c.saldo).k === filtro.estado) && (!q || sinTilde(c.nombre + ' ' + c.persona_id).includes(q)));
     const t = datos.totales || {};
     montar(cuerpo,
-      el('div', { class: 'prd-tiles', id: 'cc-totales' }, tile('Total por cobrar', pesos(t.falta_pagar), 'por_cobrar'), tile('Saldo a favor de clientes', pesos(t.saldo_a_favor), 'a_favor'), tile('Neto', pesos(t.neto), 'neto')),
+      el('div', { class: 'prd-tiles', id: 'cc-totales' }, tile('Total por cobrar', $(t.falta_pagar), 'por_cobrar'), tile('Saldo a favor de clientes', $(t.saldo_a_favor), 'a_favor'), tile('Neto', $(t.neto), 'neto')),
       !vis.length ? vacio(todas.length ? 'No hay cuentas que coincidan con los filtros.' : 'Todavía no hay cuentas con movimientos.')
         : el('div', { class: 'list', id: 'cc-cuentas' }, vis.map(c => {
           const e = estadoCuenta(c.saldo);
           return el('a', { class: 'person-card cc-row', href: '#/finanzas/cobrar/' + encodeURIComponent(c.persona_id), 'data-persona': c.persona_id, 'data-estado-cuenta': e.k },
             el('span', { class: 'pc-cell' }, el('span', { class: 'person-name', text: c.nombre || c.persona_id }), el('span', { class: 'person-also', text: (c.movimientos ?? '—') + ' movimiento(s)' })),
-            el('span', { class: 'pc-cell cc-saldo', text: c.saldo > 0 ? pesos(c.falta_pagar) : c.saldo < 0 ? pesos(c.saldo_a_favor) : pesos(0) }),
+            el('span', { class: 'pc-cell cc-saldo', text: c.saldo > 0 ? $(c.falta_pagar) : c.saldo < 0 ? $(c.saldo_a_favor) : $(0) }),
             el('span', { class: 'pc-cell chips' }, el('span', { class: 'chip ' + e.chip, text: e.txt })),
             el('span', { class: 'pc-cell pc-acciones' }, el('span', { class: 'pc-ver', 'aria-hidden': 'true', text: 'Ver' })));
         })),
