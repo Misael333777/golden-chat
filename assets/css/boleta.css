@@ -5,7 +5,7 @@
 .gb-datos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.gb-datos span{display:block;font-size:11px;color:#6B6350}.gb-datos b{font-size:14px}
 .gb table{width:100%;border-collapse:collapse;font-size:13px}.gb th{text-align:left;font-size:11px;color:#6B6350;border-bottom:1px solid #C9B37C;padding:6px 0;font-weight:600}
 .gb td{padding:7px 0;border-bottom:1px dashed #E2D6B8;vertical-align:top}.gb .n{text-align:right;white-space:nowrap}.gb .f{white-space:nowrap;padding-right:10px;font-weight:600}
-.gb-it{display:flex;justify-content:space-between;gap:8px;padding-right:14px}.gb-it span:last-child{color:#6B6350;white-space:nowrap}
+.gb-it{display:flex;justify-content:space-between;gap:8px;padding-right:14px}.gb-it span:last-child{color:#6B6350;white-space:nowrap}.gb-x span:first-child{font-style:italic}.gb-x.mas span:last-child{color:#A63D2F}.gb-x.menos span:last-child{color:#3F7D57}
 .gb-tot{margin-top:12px}.gb-r{display:flex;justify-content:space-between;gap:10px;padding:5px 0;font-size:14px}.gb-r b{white-space:nowrap}
 .gb-r.deuda b{color:#A63D2F}.gb-r.favor b{color:#3F7D57}
 .gb-final{margin-top:6px;padding:10px 12px;border-radius:10px;font-size:16px;align-items:center}.gb-final b{font-size:20px}

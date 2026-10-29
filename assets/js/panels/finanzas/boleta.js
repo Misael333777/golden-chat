@@ -16,6 +16,10 @@ const diaTxt = (f) => DIAS[new Date(f + 'T12:00:00Z').getUTCDay()] + ' ' + dm(f)
 const cant = (l) => (l.cantidad === null || l.cantidad === undefined ? '' : ENT.format(l.cantidad) + (l.unidad ? ' ' + l.unidad : ''));
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const sumarDias = (f, n) => new Date(Date.parse(f + 'T12:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
+// 29/10: extras, devoluciones y ajustes del dia (items) con su importe; los extras sin confirmar se avisan solo en pantalla.
+const items = (x) => (Array.isArray(x.items) ? x.items : []);
+const itemTxt = (i) => (i.importe > 0 ? '+ ' : i.importe < 0 ? '− ' : '') + (i.importe ? plata(i.importe) : 'sin cargo');
+const itemCls = (i) => (i.importe > 0 ? 'mas' : i.importe < 0 ? 'menos' : '');
 const diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 86400e3) + 1;
 
 // Filas de totales (texto, importe con signo, clase). Una sola fuente para pantalla, impresión e imagen.
@@ -42,7 +46,8 @@ const CSS_URL = 'assets/css/boleta.css';
 export function htmlBoleta(d, logoSrc) {
   const r = resumen(d);
   const filasDias = d.dias.map(x => '<tr><td class="f">' + esc(diaTxt(x.fecha)) + '</td><td>' +
-    (x.lineas.length ? x.lineas.map(l => '<div class="gb-it"><span>' + esc(l.detalle) + '</span><span>' + esc(cant(l)) + '</span></div>').join('') : '<div class="gb-it"><span>Pedido del día</span><span></span></div>') +
+    (x.lineas.length ? x.lineas.map(l => '<div class="gb-it"><span>' + esc(l.detalle) + '</span><span>' + esc(cant(l)) + '</span></div>').join('') : (items(x).length ? '' : '<div class="gb-it"><span>Pedido del día</span><span></span></div>')) +
+    items(x).map(i => '<div class="gb-it gb-x ' + itemCls(i) + '"><span>' + esc(i.detalle) + '</span><span>' + esc(itemTxt(i)) + '</span></div>').join('') +
     '</td><td class="n">' + esc(plata(x.importe)) + '</td></tr>').join('');
   return '<div class="gb">' +
     '<div class="gb-head"><img src="' + esc(logoSrc || LOGO) + '" alt="Golden"><div class="gb-hd"><div class="gb-t">Boleta de pedidos</div><div class="gb-m">Emitida ' + esc(dmy(hoyART())) + '</div></div></div>' +
@@ -96,7 +101,9 @@ function mostrar(zona, d) {
   const bWsp = el('button', { type: 'button', class: 'btn btn-wsp', id: 'bol-compartir' }, 'WhatsApp');
   bImp.addEventListener('click', () => imprimir(d));
   bWsp.addEventListener('click', conBloqueo(bWsp, () => compartir(d), 'Preparando…'));
-  montar(zona, vista, el('div', { class: 'row' }, bImp, bWsp),
+  const pend = Array.isArray(d.extras_sin_confirmar) ? d.extras_sin_confirmar : [];
+  const avisoPend = pend.length ? aviso('pending', 'Hay ' + pend.length + (pend.length === 1 ? ' extra entregado' : ' extras entregados') + ' sin confirmar en Finanzas → Extras (' + [...new Set(pend.map(p => dm(p.fecha)))].join(', ') + '). No están en esta boleta: confirmalos y volvé a armarla.', 'EXTRAS_SIN_CONFIRMAR') : null;
+  montar(zona, avisoPend, vista, el('div', { class: 'row' }, bImp, bWsp),
     el('p', { class: 'muted small', text: 'Imprimir también permite "Guardar como PDF". WhatsApp comparte la boleta como imagen.' }));
 }
 
@@ -124,7 +131,7 @@ async function imagenBoleta(d) {
   try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (err) { /* sin fuentes: usa las del sistema */ }
   const F = (peso, tam, serif) => peso + ' ' + tam + 'px ' + (serif ? 'Fraunces, Georgia, serif' : 'Manrope, system-ui, sans-serif');
   // Alto: cabecera + datos + encabezado tabla + filas + totales + notas
-  const altoDia = (x) => Math.max(1, x.lineas.length) * 18 + 14;
+  const altoDia = (x) => Math.max(1, x.lineas.length + items(x).length) * 18 + 14;
   const H = 70 + 60 + 26 + d.dias.reduce((a, x) => a + altoDia(x), 0) + 16 + r.filas.length * 26 + 52 + r.notas.length * 34 + 46;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext('2d'); g.scale(S, S);
@@ -145,10 +152,14 @@ async function imagenBoleta(d) {
     let yy = y + 18;
     g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('600', 13); g.fillText(diaTxt(x.fecha), P, yy);
     g.textAlign = 'right'; g.font = F('400', 13); g.fillText(plata(x.importe), W - P, yy);
-    const ls = x.lineas.length ? x.lineas : [{ detalle: 'Pedido del día', cantidad: null }];
+    const ls = x.lineas.length || items(x).length ? x.lineas : [{ detalle: 'Pedido del día', cantidad: null }];
     for (const l of ls) {
       g.textAlign = 'left'; g.fillStyle = '#241F16'; g.fillText(recorta(l.detalle, 150), P + 82, yy);
       g.textAlign = 'right'; g.fillStyle = '#6B6350'; g.fillText(cant(l), W - P - 92, yy); yy += 18;
+    }
+    for (const i of items(x)) {
+      g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('400', 12); g.fillText(recorta(i.detalle, 170), P + 82, yy);
+      g.textAlign = 'right'; g.fillStyle = i.importe > 0 ? '#A63D2F' : i.importe < 0 ? '#3F7D57' : '#6B6350'; g.fillText(itemTxt(i), W - P - 92, yy); g.font = F('400', 13); yy += 18;
     }
     y += altoDia(x);
     g.fillStyle = '#E2D6B8'; for (let i = P; i < W - P; i += 6) g.fillRect(i, y, 3, 1);
