@@ -29,7 +29,7 @@ export function vistaMovimientos(ctx, cont) {
       montar(zona,
         !l.length ? vacio('No hay movimientos con estos filtros.') : tabla(['Concepto', 'Fecha', 'Tipo', 'Cuenta', 'Persona', 'Importe'], l.map(m => ({ dataset: { mov: m.id, fuente: m.fuente, tipo: m.tipo },
           celdas: [conceptoMov(m, false), fmtFecha(m.fecha), el('span', null, m.tipo_label || m.tipo, ' ', el('span', { class: 'chip', text: RES_TXT[m.resultado] || (m.fuente === 'cuenta_corriente' ? 'Cuenta corriente' : '—') }),
-            m.registrado_por ? el('small', { class: 'muted', 'data-registro': 'si', text: ' · cargó ' + m.registrado_por }) : null),
+            m.registrado_por ? el('span', { class: 'cargado-por', 'data-registro': 'si' }, 'Cargó: ', el('b', { text: m.registrado_por })) : null),
             [m.cuenta_origen, m.cuenta_destino].filter(Boolean).join(' → ') || '—', m.persona || '—', pesos(m.importe)] })), 'mv-items'),
         el('div', { class: 'row', id: 'mv-paginas', 'data-pagina': String(d.pagina || 1), 'data-total-paginas': String(d.total_paginas || 1) },
           pag((d.pagina || 1) - 1, 'Anterior', 'mv-anterior'), el('span', { class: 'muted small', text: 'Página ' + (d.pagina || 1) + ' de ' + (d.total_paginas || 1) + ' · ' + (d.total ?? l.length) + ' movimiento(s)' }),

@@ -896,3 +896,7 @@ body:has(.admin-page) .badge-test { display: none; }
 .arm-logistica .field { margin: 0; }
 .arm-carrito .form-grid.two { gap: 8px; }
 .card .arm-marco { gap: 14px; }
+
+/* 30/10: quién cargó cada movimiento (Finanzas: cuenta del cliente y Movimientos) — legible, en su propio renglón */
+.cargado-por { display: block; margin-top: 4px; font-size: 0.86rem; font-weight: 600; color: var(--gold-deep); }
+.cargado-por b { color: var(--ink); font-weight: 800; }

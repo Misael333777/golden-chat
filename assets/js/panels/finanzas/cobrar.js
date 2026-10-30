@@ -100,7 +100,7 @@ export function vistaCuenta(ctx, cont, pid) {
       !movs.length ? vacio('Esta cuenta no tiene movimientos.')
         : tabla(['Fecha', 'Movimiento', 'Concepto', 'Importe', 'Saldo después', 'Acción'], movs.map(m => ({ dataset: { ccm: m.ccm_id, tipo: m.tipo, revertido: m.revertido ? 'si' : 'no' },
           celdas: [fmtFecha(m.fecha), el('span', null, TIPO_TXT[m.tipo] || 'Movimiento', m.revertido ? el('span', { class: 'chip off', text: 'Revertido' }) : null, m.revierte_ccm_id ? el('span', { class: 'chip', text: 'Revierte otro' }) : null,
-              m.registrado_por ? el('small', { class: 'muted', 'data-registro': 'si', text: ' · cargó ' + m.registrado_por + horaReg(m.creado_en) }) : null),
+              m.registrado_por ? el('span', { class: 'cargado-por', 'data-registro': 'si' }, 'Cargó: ', el('b', { text: m.registrado_por }), horaReg(m.creado_en)) : null),
             [...new Set([m.concepto ? conceptoMov(m, false) : null, ORIGEN_TXT[m.origen]].filter(Boolean))].concat(m.motivo ? ['Motivo: ' + m.motivo] : []).join(' · ') || '—',
             (m.importe_firmado > 0 ? '+' : '−') + pesos(Math.abs(m.importe_firmado)), pesos(m.saldo_despues),
             revertible(m) ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'revertir', onclick: () => revertir(ctx, m, recargar) }, 'Revertir') : '—'] })), 'cc-movimientos'),
@@ -110,7 +110,7 @@ export function vistaCuenta(ctx, cont, pid) {
 
 // Saldo inicial, cargos y ajustes se pueden revertir (los cobros no: tienen dinero asociado). La reversión agrega un movimiento; nada se borra.
 // 30/10: quién cargó cada movimiento (nombre; 'Sistema' para el cobro automático) y a qué hora (Argentina).
-const horaReg = (iso) => { const t = Date.parse(iso || ''); if (!Number.isFinite(t)) return ''; const d = new Date(t - 3 * 3600e3).toISOString(); return ' el ' + d.slice(8, 10) + '/' + d.slice(5, 7) + ' ' + d.slice(11, 16); };
+const horaReg = (iso) => { const t = Date.parse(iso || ''); if (!Number.isFinite(t)) return ''; const d = new Date(t - 3 * 3600e3).toISOString(); return ' · ' + d.slice(8, 10) + '/' + d.slice(5, 7) + ' ' + d.slice(11, 16); };
 const REVERSIBLES = ['saldo_inicial', 'cargo', 'ajuste_debito', 'ajuste_credito'];
 function nuevoAjuste(ctx, quien, alTerminar) {
   const sTipo = selector('aj-tipo', [['debito', 'Débito (aumenta lo que debe)'], ['credito', 'Crédito (reduce lo que debe)']]);
