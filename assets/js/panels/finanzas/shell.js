@@ -1,6 +1,6 @@
 // Panel Admin Finanzas. Mismo marco visual que Admin General (assets/js/marco.js). Las 11 secciones tienen backend real (Web API PROD →
 // Consultas / Escrituras PROD). Escrituras: previsualizar → confirmar → registrar, con operacion_id idempotente y reintento seguro.
-import { el, montar, conBloqueo } from '../../ui.js';
+import { el, montar, conBloqueo, toast } from '../../ui.js';
 import * as ops from '../../ops.js';
 import { marco } from '../../marco.js';
 import { TIPO, avisoFin } from './comun.js';
@@ -74,9 +74,34 @@ function describir(p) {
   return [ACC_TXT[p.accion] || p.accion, c.tipo_pago === 'adelanto' ? 'adelanto' : null, c.concepto || c.nombre || null,
     typeof c.importe === 'number' ? '$ ' + c.importe : (typeof c.importe_original === 'number' ? '$ ' + c.importe_original : null), c.periodo || null].filter(Boolean).join(' · ');
 }
+// 31/10: antes de mostrar el aviso, cada pendiente se verifica UNA vez en silencio reenviando la MISMA operación (mismo operacion_id).
+// El backend es idempotente: si ya estaba registrada responde OPERACION_YA_PROCESADA y no duplica. Solo quedan en el aviso las que
+// siguen sin confirmar (red caída o candado todavía ocupado).
+const verificadas = new Set();
+async function verificarPendientes(ctx, lista) {
+  let cambio = false;
+  for (const p of lista) {
+    if (verificadas.has(p.operacion_id)) continue;
+    verificadas.add(p.operacion_id);
+    if (!ops.hayPendiente(p.accion, p.campos)) continue;
+    const res = await ops.ejecutar(ctx.base(TIPO), p.accion, p.campos);
+    if (res.r && ctx.revisarFinSesion(res.r)) return false;
+    if (res.r && res.r.codigo !== 'OPERACION_EN_CURSO') {
+      cambio = true;
+      toast(res.r.codigo === 'OPERACION_YA_PROCESADA' ? describir(p) + ': ya estaba registrado. No se duplicó.'
+        : (res.r.success ? describir(p) + ': registrado.' : describir(p) + ': ' + (res.r.mensaje || 'no se pudo registrar.')));
+    }
+  }
+  return cambio;
+}
 function pintarPendientes(ctx, zona) {
   const lista = ops.listar((acc, tipo) => tipo === 'admin_finanzas' && ops.ACCIONES_FINANZAS.includes(acc));
   if (!lista.length) return montar(zona);
+  if (lista.some(p => !verificadas.has(p.operacion_id))) {
+    montar(zona, el('div', { class: 'notice pending', role: 'status', 'data-verificando': 'true' }, 'Verificando operaciones que quedaron sin confirmar…'));
+    verificarPendientes(ctx, lista).then(() => { if (zona.isConnected) pintarPendientes(ctx, zona); }).catch(() => { if (zona.isConnected) pintarPendientes(ctx, zona); });
+    return;
+  }
   montar(zona, el('div', { class: 'notice pending stack', role: 'alert', 'data-pendientes-fin': String(lista.length) },
     el('strong', { text: 'Operaciones financieras sin confirmar' }),
     el('span', { text: 'No sabemos si se registraron (o había otra operación en curso). Reintentá la misma operación: si ya se había registrado, no se duplica.' }),
