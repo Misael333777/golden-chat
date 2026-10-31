@@ -80,9 +80,9 @@ function describir(p) {
 const verificadas = new Set();
 async function verificarPendientes(ctx, lista) {
   let cambio = false;
-  for (const p of lista) {
-    if (verificadas.has(p.operacion_id)) continue;
-    verificadas.add(p.operacion_id);
+  const nuevas = lista.filter(p => !verificadas.has(p.operacion_id));
+  nuevas.forEach(p => verificadas.add(p.operacion_id)); // todas marcadas antes de enviar: nunca dos envíos en paralelo de la misma operación
+  for (const p of nuevas) {
     if (!ops.hayPendiente(p.accion, p.campos)) continue;
     const res = await ops.ejecutar(ctx.base(TIPO), p.accion, p.campos);
     if (res.r && ctx.revisarFinSesion(res.r)) return false;

@@ -128,9 +128,27 @@ function describir(p) {
   if (c.texto) partes.push(String(c.texto).slice(0, 40));
   return partes.join(' · ');
 }
+// 31/10: antes de mostrar el aviso, cada pendiente se verifica UNA vez en silencio reenviando la MISMA operación (mismo operacion_id).
+// El backend es idempotente: si ya estaba registrada responde OPERACION_YA_PROCESADA y no duplica. Se marcan todas antes de enviar
+// para no mandar la misma operación dos veces en paralelo (el aviso se repinta con cada cambio de ops).
+const verificadas = new Set();
+async function verificarPendientes(ctx, lista) {
+  const nuevas = lista.filter(p => !verificadas.has(p.operacion_id));
+  nuevas.forEach(p => verificadas.add(p.operacion_id));
+  for (const p of nuevas) {
+    if (!ops.hayPendiente(p.accion, p.campos)) continue;
+    const res = await ops.ejecutar(ctx.base('admin_general'), p.accion, p.campos);
+    if (res.r && ctx.revisarFinSesion(res.r)) return;
+  }
+}
 function pintarPendientes(ctx, zona) {
   const lista = ops.listar((acc, tipo) => tipo === 'admin_general' && !ops.ACCIONES_FINANZAS.includes(acc)); // las de Admin Finanzas se reintentan en su panel
   if (!lista.length) return montar(zona);
+  if (lista.some(p => !verificadas.has(p.operacion_id))) {
+    montar(zona, el('div', { class: 'notice pending', role: 'status', 'data-verificando': 'true' }, 'Verificando operaciones que quedaron sin confirmar…'));
+    verificarPendientes(ctx, lista).catch(() => null).then(() => { if (zona.isConnected) pintarPendientes(ctx, zona); });
+    return;
+  }
   montar(zona, el('div', { class: 'notice pending stack', role: 'alert', 'data-pendientes': String(lista.length) },
     el('strong', { text: 'Operaciones sin confirmar' }),
     el('span', { text: 'No sabemos si se registraron. Reintentá la misma operación (si ya se había registrado, no se duplica) o descartala.' }),
