@@ -8,10 +8,11 @@ import * as ops from '../../ops.js';
 import { el, montar, aviso, avisoBackend, modal, confirmar, conBloqueo, toast, chipsRol, textoRol, textoLista } from '../../ui.js';
 
 const TIPO = 'admin_general';
-const ROLES_SECCION = ['cliente', 'repartidor']; // roles gestionables desde Clientes / Repartidores (admin nunca)
-// Configuración → Admin Finanzas: misma lógica de personas; ahí solo se gestiona el rol admin_finanzas (crear_persona / agregar_rol existentes).
-const rolesSeccion = (s) => (s.rol === 'admin_finanzas' ? ['admin_finanzas'] : ROLES_SECCION);
-const ultimaBusqueda = { clientes: '', repartidores: '', 'configuracion/admin-finanzas': '' };
+const ROLES_SECCION = ['cliente', 'repartidor', 'produccion']; // roles gestionables desde Clientes / Repartidores (admin nunca)
+// Configuración → Admin Finanzas / Producción: misma lógica de personas; ahí solo se gestiona ese rol (crear_persona / agregar_rol existentes).
+const ROLES_PROPIOS = ['admin_finanzas', 'produccion'];
+const rolesSeccion = (s) => (s.rol === 'admin_finanzas' ? ['admin_finanzas'] : s.rol === 'produccion' ? ['produccion'] : ROLES_SECCION);
+const ultimaBusqueda = { clientes: '', repartidores: '', 'configuracion/admin-finanzas': '', 'configuracion/produccion': '' };
 
 const str = (v) => (typeof v === 'string' ? v : null);
 // Presentación: iniciales decorativas a partir del nombre que ya vino del backend (no se envía ni se guarda nada).
@@ -40,7 +41,7 @@ export function vistaPersonas(ctx, cont, s) {
   const input = el('input', { class: 'input', id: 'buscar', type: 'search', maxlength: '100', placeholder: 'Buscar por nombre, teléfono o ID…', 'aria-label': 'Buscar', value: ultimaBusqueda[s.id] });
   const bBuscar = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-buscar' }, 'Buscar');
   const bNueva = el('button', { type: 'button', class: 'btn btn-gold', id: 'btn-nueva', onclick: () => abrirCrear(ctx, s) }, 'Nueva persona');
-  const bAsignar = s.rol === 'admin_finanzas' ? el('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-asignar-existente', onclick: () => abrirAsignar(ctx, s) }, 'Asignar a persona existente') : null;
+  const bAsignar = ROLES_PROPIOS.includes(s.rol) ? el('button', { type: 'button', class: 'btn btn-ghost', id: 'btn-asignar-existente', onclick: () => abrirAsignar(ctx, s) }, 'Asignar a persona existente') : null;
   const zona = el('div', { class: 'stack', id: 'listado', 'data-seccion': s.id, 'data-estado': 'cargando' });
   const form = el('form', { class: 'row search-row', role: 'search' }, el('div', { class: 'field search-field', style: null }, input), bBuscar);
   form.firstChild.style.flex = '1 1 220px';
@@ -166,7 +167,7 @@ function listaCandidatos(ctx, s, personas, m) {
         onclick: () => { m.cerrar(); ctx.ir('#/admin/' + s.id + '/' + encodeURIComponent(p.persona_id)); } }, 'Ver ficha (usar esta persona)')))));
 }
 
-// ======================= ASIGNAR ADMIN FINANZAS A UNA PERSONA EXISTENTE =======================
+// ======================= ASIGNAR ADMIN FINANZAS / PRODUCCIÓN A UNA PERSONA EXISTENTE =======================
 // Busca entre todas las personas (listar_personas) y usa agregar_rol: misma persona, mismo persona_id y mismo código de acceso.
 function abrirAsignar(ctx, s) {
   const iBus = el('input', { class: 'input', id: 'asignar-buscar', type: 'search', maxlength: '100', placeholder: 'Nombre o teléfono…', autocomplete: 'off', 'aria-label': 'Buscar persona' });

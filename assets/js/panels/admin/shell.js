@@ -39,13 +39,15 @@ const PRESENTACION = {
   pendientes: { ico: 'alerta', sub: 'Lo que requiere atención', dia: true, desc: 'Lo que necesita intervención.' },
   historial: { ico: 'reloj', sub: 'Quién hizo qué', desc: 'Quién hizo qué y cuándo.' },
   reportes: { ico: 'grafico', sub: 'Resúmenes por período', desc: 'Resúmenes por período.' },
-  configuracion: { ico: 'ajustes', sub: 'Datos generales', desc: 'Datos generales de Golden y Admin Finanzas.' },
+  configuracion: { ico: 'ajustes', sub: 'Datos generales', desc: 'Datos generales de Golden, Admin Finanzas y Producción.' },
 };
 export const SECCIONES = {
   clientes: { id: 'clientes', titulo: 'Clientes', rol: 'cliente', singular: 'cliente' },
   repartidores: { id: 'repartidores', titulo: 'Repartidores', rol: 'repartidor', singular: 'repartidor' },
   // Se entra desde Configuración (no es un ítem del menú).
   admin_finanzas: { id: 'configuracion/admin-finanzas', titulo: 'Admin Finanzas', rol: 'admin_finanzas', singular: 'Admin Finanzas' },
+  // 01/11: personal de Producción (panel Producción). También se entra desde Configuración.
+  produccion: { id: 'configuracion/produccion', titulo: 'Personal de Producción', rol: 'produccion', singular: 'Producción' },
 };
 
 export function vistaAdmin(ctx, partes) {
@@ -94,6 +96,7 @@ export function vistaAdmin(ctx, partes) {
   if (sec === 'historial') return vistaHistorial(ctx, contenido);
   if (sec === 'reportes') return vistaReportes(ctx, contenido);
   if (sec === 'configuracion' && partes[1] === 'admin-finanzas') return partes[2] ? vistaFicha(ctx, contenido, SECCIONES.admin_finanzas, decodeURIComponent(partes[2])) : vistaPersonas(ctx, contenido, SECCIONES.admin_finanzas);
+  if (sec === 'configuracion' && partes[1] === 'produccion') return partes[2] ? vistaFicha(ctx, contenido, SECCIONES.produccion, decodeURIComponent(partes[2])) : vistaPersonas(ctx, contenido, SECCIONES.produccion);
   if (sec === 'configuracion') return vistaConfiguracion(ctx, contenido);
   if (sec === 'catalogo') return partes[1] ? vistaProducto(ctx, contenido, decodeURIComponent(partes[1])) : vistaCatalogo(ctx, contenido);
   const s = SECCIONES[sec];

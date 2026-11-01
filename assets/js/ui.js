@@ -92,9 +92,9 @@ export function conBloqueo(boton, fn, textoEnvio) {
   };
 }
 
-const ROL_TXT = { cliente: 'Cliente', repartidor: 'Repartidor', admin: 'Admin General', admin_finanzas: 'Admin Finanzas' };
+const ROL_TXT = { cliente: 'Cliente', repartidor: 'Repartidor', admin: 'Admin General', admin_finanzas: 'Admin Finanzas', produccion: 'Producción' };
 export const textoRol = (r) => ROL_TXT[r] || String(r);
-const PANEL_TXT = { admin_general: 'Admin General', admin_finanzas: 'Admin Finanzas', cliente: 'Cliente', repartidor: 'Repartidor' };
+const PANEL_TXT = { admin_general: 'Admin General', admin_finanzas: 'Admin Finanzas', cliente: 'Cliente', repartidor: 'Repartidor', produccion: 'Producción' };
 export const textoPanel = (p) => PANEL_TXT[p] || String(p);
 export const textoLista = (l) => (l === null || l === undefined || l === '') ? 'Sin definir' : (l === 'minorista' ? 'Minorista' : l === 'mayorista' ? 'Mayorista' : String(l));
 

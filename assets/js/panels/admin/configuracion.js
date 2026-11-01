@@ -22,7 +22,11 @@ export function vistaConfiguracion(ctx, cont) {
     el('div', { class: 'card stack', id: 'cfg-admin-finanzas' },
       el('div', { class: 'card-head' }, el('div', null, el('h3', { class: 'h-ico h-ico-roles', text: 'Admin Finanzas' }),
         el('p', { class: 'muted small', text: 'Crear una persona con rol Admin Finanzas o asignar el rol a una persona existente (mantiene su mismo código de acceso).' })),
-        el('span', { class: 'spacer' }), el('a', { class: 'btn btn-ghost btn-sm', id: 'btn-gestionar-af', href: '#/admin/configuracion/admin-finanzas' }, 'Gestionar Admin Finanzas'))));
+        el('span', { class: 'spacer' }), el('a', { class: 'btn btn-ghost btn-sm', id: 'btn-gestionar-af', href: '#/admin/configuracion/admin-finanzas' }, 'Gestionar Admin Finanzas'))),
+    el('div', { class: 'card stack', id: 'cfg-produccion' },
+      el('div', { class: 'card-head' }, el('div', null, el('h3', { class: 'h-ico h-ico-roles', text: 'Producción' }),
+        el('p', { class: 'muted small', text: 'Personas que usan el panel Producción (ven lo que lleva cada cliente, cargan extras y devoluciones). Podés crear una nueva o darle el rol a alguien que ya existe.' })),
+        el('span', { class: 'spacer' }), el('a', { class: 'btn btn-ghost btn-sm', id: 'btn-gestionar-prod', href: '#/admin/configuracion/produccion' }, 'Gestionar Producción'))));
   async function cargar() {
     cuerpo.dataset.estado = 'cargando';
     montar(cuerpo, el('div', { class: 'skeleton' }));

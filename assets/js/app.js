@@ -8,6 +8,7 @@ import { vistaSelector } from './panels/selector.js';
 import { vistaAdmin } from './panels/admin/shell.js';
 import { vistaFinanzas } from './panels/finanzas/shell.js';
 import { vistaCliente, vistaRepartidor } from './panels/cliente/shell.js';
+import { vistaProduccion } from './panels/produccion/shell.js';
 import { iniciarInstalacion } from './instalar.js';
 
 iniciarInstalacion(); // 17/10: la pagina se puede instalar como app (boton en el inicio de los paneles de administracion)
@@ -47,6 +48,7 @@ function despuesDeEntrar() {
   else if (d.paneles.length === 1 && d.paneles[0] === 'admin_finanzas') { sesion.elegirPanel('admin_finanzas'); ctx.ir('#/finanzas/inicio'); }
   else if (d.paneles.length === 1 && d.paneles[0] === 'cliente') { sesion.elegirPanel('cliente'); ctx.ir('#/cliente/inicio'); }
   else if (d.paneles.length === 1 && d.paneles[0] === 'repartidor') { sesion.elegirPanel('repartidor'); ctx.ir('#/repartidor/inicio'); }
+  else if (d.paneles.length === 1 && d.paneles[0] === 'produccion') { sesion.elegirPanel('produccion'); ctx.ir('#/produccion/inicio'); }
   else ctx.ir('#/paneles');
 }
 
@@ -96,8 +98,12 @@ async function render() {
     if (d.panel !== 'repartidor') return ctx.ir('#/paneles');
     return vistaRepartidor(ctx, partes.slice(1));
   }
+  if (partes[0] === 'produccion') {
+    if (d.panel !== 'produccion') return ctx.ir('#/paneles');
+    return vistaProduccion(ctx, partes.slice(1));
+  }
   if (partes[0] === 'paneles' || !d.panel) return vistaSelector(ctx, sesion);
-  return ctx.ir(d.panel === 'admin_general' ? '#/admin/inicio' : d.panel === 'admin_finanzas' ? '#/finanzas/inicio' : d.panel === 'cliente' ? '#/cliente/inicio' : d.panel === 'repartidor' ? '#/repartidor/inicio' : '#/paneles');
+  return ctx.ir(d.panel === 'admin_general' ? '#/admin/inicio' : d.panel === 'admin_finanzas' ? '#/finanzas/inicio' : d.panel === 'cliente' ? '#/cliente/inicio' : d.panel === 'repartidor' ? '#/repartidor/inicio' : d.panel === 'produccion' ? '#/produccion/inicio' : '#/paneles');
 }
 window.addEventListener('hashchange', render);
 

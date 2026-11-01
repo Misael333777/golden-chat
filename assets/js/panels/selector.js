@@ -1,16 +1,17 @@
-// Selector de panel. Admin General, Admin Finanzas, Cliente y Repartidor tienen contenido en la página.
+// Selector de panel. Admin General, Admin Finanzas, Cliente, Repartidor y Producción tienen contenido en la página.
 // Diseño de la maqueta aprobada: misma lógica (elegir panel → ir a su inicio), tarjetas con ícono y descripción.
 import { el, montar, textoPanel } from '../ui.js';
 import { icono } from './cliente/iconos.js';
 import { disparar } from '../marco.js';
 
-const ORDEN = ['admin_general', 'admin_finanzas', 'cliente', 'repartidor'];
-const DESTINO = { admin_general: '#/admin/inicio', admin_finanzas: '#/finanzas/inicio', cliente: '#/cliente/inicio', repartidor: '#/repartidor/inicio' };
+const ORDEN = ['admin_general', 'admin_finanzas', 'produccion', 'cliente', 'repartidor'];
+const DESTINO = { admin_general: '#/admin/inicio', admin_finanzas: '#/finanzas/inicio', cliente: '#/cliente/inicio', repartidor: '#/repartidor/inicio', produccion: '#/produccion/inicio' };
 const INFO = {
   admin_general: { ico: 'ajustes', txt: 'Personas, catálogo, pedidos y producción.' },
   admin_finanzas: { ico: 'banco', txt: 'Cobros, gastos, cuentas y revisiones.' },
   cliente: { ico: 'pedido', txt: 'Tus pedidos, tu habitual y tu cuenta.' },
   repartidor: { ico: 'camion', txt: 'Tus pedidos y tus clientes del reparto.' },
+  produccion: { ico: 'produccion', txt: 'Lo que lleva cada cliente, extras y devoluciones.' },
 };
 
 export function vistaSelector(ctx, sesion) {

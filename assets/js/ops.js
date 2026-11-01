@@ -25,14 +25,16 @@ const ACCIONES = ['crear_persona', 'editar_persona', 'agregar_rol', 'quitar_rol'
   // Etapa 4: habitual multiproducto por día, 'Hoy no pedir' y 'Volver al habitual' / 'Cancelar pedido' (cliente: anular; Admin General: anular_pedido_fecha).
   'editar_habitual_dia', 'hoy_no_pedir', 'anular', 'anular_pedido_fecha',
   // 24/10: devoluciones (Admin General).
-  'registrar_devolucion', 'cambiar_lista_precio', 'sueldos_asistencia', 'sueldos_mercaderia', 'sueldos_adelanto', 'sueldos_anular', 'sueldos_liquidar'].concat(ACCIONES_FINANZAS);
+  'registrar_devolucion', 'cambiar_lista_precio', 'sueldos_asistencia', 'sueldos_mercaderia', 'sueldos_adelanto', 'sueldos_anular', 'sueldos_liquidar',
+  // 01/11: panel Producción (tipo produccion): extra ya entregado y devolución descontada de la cuenta.
+  'prod_registrar_extra', 'prod_registrar_devolucion'].concat(ACCIONES_FINANZAS);
 // Tipo de la Web API con el que se envió cada operación (se guarda para reintentarla en el MISMO panel). Las entradas viejas sin tipo
 // se asignan como antes: escrituras de Finanzas -> admin_finanzas; el resto -> admin_general.
-const TIPOS = ['admin_general', 'admin_finanzas', 'pedido', 'recurrente', 'extra', 'soporte'];
+const TIPOS = ['admin_general', 'admin_finanzas', 'pedido', 'recurrente', 'extra', 'soporte', 'produccion'];
 const tipoPorDefecto = (accion) => (ACCIONES_FINANZAS.includes(accion) ? 'admin_finanzas' : 'admin_general');
 // Panel con el que se envió (cliente y repartidor comparten tipos de la Web API): el reintento se ofrece solo en ese mismo panel.
-const PANELES = ['admin_general', 'admin_finanzas', 'cliente', 'repartidor'];
-const panelPorDefecto = (tipo) => (tipo === 'admin_general' || tipo === 'admin_finanzas' ? tipo : 'cliente');
+const PANELES = ['admin_general', 'admin_finanzas', 'cliente', 'repartidor', 'produccion'];
+const panelPorDefecto = (tipo) => (tipo === 'admin_general' || tipo === 'admin_finanzas' || tipo === 'produccion' ? tipo : 'cliente');
 const PROHIBIDOS = ['token', 'codigo_acceso', 'tipo', 'panel_activo', 'operacion_id', 'accion', 'actor', 'persona_id_actor', 'rol_actor'];
 const OP_RE = /^WEB-[0-9a-f-]{32,36}$/;
 const PID = /^PER-[A-Z0-9]+-[A-Z0-9]+$/;
