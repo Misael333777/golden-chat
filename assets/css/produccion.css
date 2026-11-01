@@ -38,11 +38,6 @@
 .prod-total strong { font-size: 1.2rem; }
 .prod-total small { flex-basis: 100%; }
 
-.produccion-page .lin-fila > select, .modal .lin-fila > select[id^="pex-prod-"] { grid-column: 1 / -1; }
-.lin-fila .pex-det { grid-column: 1 / -1; }
-.lin-fila .pex-det:empty { display: none; }
-.modal .lin-fila > select[id^="pex-prod-"] + .input-num { grid-column: 1 / 2; }
-.prod-cat-precio { margin-left: auto; font-weight: 700; }
 
 @media (min-width: 640px) {
   .prod-acciones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -53,4 +48,14 @@
   .prod-linea .pc-label { display: none; }
   .prod-linea-precio { color: var(--ink); }
 }
+
+/* Registrar extra (carrito) y Catálogo con tarjetas: mismo armador que el panel Cliente, con botones más grandes para usar con una mano. */
 #pex-obs { font-family: inherit; }
+.produccion-page .arm-selector { grid-template-columns: 52px minmax(0, 1fr) 52px; padding: 4px; }
+.produccion-page .arm-btn { width: 52px; height: 48px; font-size: 1.5rem; font-weight: 700; }
+.produccion-page .arm-cant { height: 48px; font-size: 1.15rem; }
+.produccion-page .arm-barra-movil { min-height: 58px; font-size: 1rem; }
+.produccion-page .arm-enviar { min-height: 58px; font-size: 1.05rem; }
+.produccion-page .arm-card.en-pedido .arm-cant { color: var(--gold-deep); }
+.prod-cat-titulo { font-size: 1.25rem; margin-top: 4px; }
+@media (max-width: 380px) { .produccion-page .arm-selector { grid-template-columns: 44px minmax(0, 1fr) 44px; } .produccion-page .arm-btn { width: 44px; } }

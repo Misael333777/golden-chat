@@ -1,6 +1,6 @@
 // Panel Producción → Clientes (inicio) y día de un cliente.
 // Lecturas (tipo produccion): prod_clientes, prod_dia_cliente (planilla cerrada del día: hoy y hasta 60 días atrás), prod_catalogo (con el precio del cliente).
-// Escrituras (ops.ejecutar, operacion_id idempotente): prod_registrar_extra (solo hoy; queda para que Finanzas lo confirme) y
+// Escrituras (ops.ejecutar, operacion_id idempotente): prod_registrar_extra (solo hoy, pantalla carrito #/produccion/cliente/<id>/extra; queda para Finanzas) y
 // prod_registrar_devolucion (solo "descontar", al precio del sistema; Producción no repone). El backend valida todo.
 // Nunca se muestra el saldo de la cuenta del cliente.
 import * as ops from '../../ops.js';
@@ -9,6 +9,7 @@ import { el, montar, aviso, modal, confirmar, conBloqueo, toast } from '../../ui
 import { avisoFalla, avisoSinConfirmar } from '../admin/personas.js';
 import { icono } from '../cliente/iconos.js';
 import { tarjetaInstalar } from '../../instalar.js';
+import { armadorPedido } from '../cliente/armador.js';
 import { TIPO, FECHA_RE, hoyART, minFecha, pesos, str, nOk, fnum, redondo, uTxt, cant, leerCant, sinTilde, fmtFecha, listaDe, normProducto, ordenarProductos,
   cabecera, vacio, avisoR, leer, memoria, nombreCliente } from './comun.js';
 
@@ -109,7 +110,7 @@ export function vistaDiaCliente(ctx, cont, pid) {
   };
   iFecha.addEventListener('change', () => cambiarFecha(iFecha.value));
   bHoy.addEventListener('click', () => cambiarFecha(hoyART()));
-  bExtra.addEventListener('click', () => { if (!bExtra.disabled) { montar(avisos); abrirExtra(ctx, { pid, nombre: nombre || 'Cliente' }, (r) => { montar(avisos, avisoR(r)); cargar(); }); } });
+  bExtra.addEventListener('click', () => { if (!bExtra.disabled) ctx.ir('#/produccion/cliente/' + encodeURIComponent(pid) + '/extra'); });
   bDev.addEventListener('click', () => { if (!bDev.disabled && dia) { montar(avisos); abrirDevolucion(ctx, { pid, nombre: nombre || 'Cliente' }, dia, (r) => { if (r) montar(avisos, avisoR(r)); cargar(); }); } });
   cargar();
 }
@@ -147,90 +148,55 @@ function pintarDia(zona, d) {
           TXT_CREDITO[v.estado_credito] || null].filter(Boolean).join(' · ') }))))) : null);
 }
 
-// ======================= REGISTRAR EXTRA (solo hoy) =======================
-async function abrirExtra(ctx, cli, alTerminar) {
+// ======================= REGISTRAR EXTRA (solo hoy): pantalla completa tipo carrito =======================
+// Reusa el armador del panel Cliente (tarjetas con foto, − / +, barra fija abajo y carrito). Fotos: prod_catalogo no devuelve imagen
+// (ni tiene_imagen), así que cada tarjeta muestra el placeholder Golden. Payload igual que antes: { persona_id, fecha, lineas:[{producto_id, cantidad}], observacion? }.
+export function vistaExtra(ctx, cont, pid) {
   const hoy = hoyART();
-  const cuerpo = el('div', { class: 'stack', id: 'pex-cuerpo' }, el('div', { class: 'skeleton' }));
-  const m = modal('Extra — ' + cli.nombre, cuerpo);
-  const res = await ctx.pedir(TIPO, 'prod_catalogo', { persona_id: cli.pid });
-  if (!cuerpo.isConnected) return;
-  if (res.falla) return montar(cuerpo, avisoFalla(res.falla, () => { m.cerrar(); abrirExtra(ctx, cli, alTerminar); }));
-  if (ctx.revisarFinSesion(res.r)) return m.cerrar();
-  if (!res.r.success) return montar(cuerpo, avisoR(res.r));
-  const productos = ordenarProductos(listaDe(res.r.datos, 'productos', 'catalogo').map(normProducto).filter(Boolean));
-  if (!productos.length) return montar(cuerpo, aviso('info', 'No hay productos activos para cargar.'));
-  const porId = new Map(productos.map(p => [p.producto_id, p]));
-  const categorias = [...new Set(productos.map(p => p.categoria || 'Otros'))];
-
-  const filas = [];
-  const ed = el('div', { class: 'stack lin-editor', id: 'pex-lineas' });
-  const zTotal = el('div', { class: 'prod-total', id: 'pex-total' });
-  const iObs = el('textarea', { class: 'input', id: 'pex-obs', maxlength: '300', rows: '2', placeholder: 'Opcional (ej. se lo llevó al mediodía)' });
-  const zAviso = el('div', { class: 'stack', id: 'pex-aviso' });
-  const bOk = el('button', { type: 'submit', class: 'btn btn-gold', id: 'pex-registrar' }, 'Registrar extra');
-  const opciones = () => [el('option', { value: '', text: 'Elegí un producto…' }), ...categorias.map(cat => el('optgroup', { label: cat },
-    productos.filter(p => (p.categoria || 'Otros') === cat).map(p => el('option', { value: String(p.producto_id), text: p.nombre + (p.unidad ? ' (' + uTxt(p.unidad) + ')' : '') + (p.precio !== null ? ' · ' + pesos(p.precio) : '') }))))];
-  const recalcular = () => {
-    let t = 0; let sinPrecio = false; let algo = false;
-    for (const f of filas) {
-      const p = porId.get(Number(f.sProd.value)); const q = leerCant(f.iCant.value);
-      f.det.textContent = p && q > 0 ? (p.precio !== null ? fnum(q) + ' × ' + pesos(p.precio) + ' = ' + pesos(redondo(q * p.precio)) : 'Sin precio cargado') : '';
-      if (p && q > 0) { algo = true; if (p.precio !== null) t += q * p.precio; else sinPrecio = true; }
+  const volver = '#/produccion/cliente/' + encodeURIComponent(pid);
+  const nombre = nombreCliente(pid) || 'Cliente';
+  const zona = el('div', { class: 'stack', id: 'pex', 'data-estado': 'cargando' });
+  montar(cont,
+    el('a', { class: 'btn btn-ghost btn-sm btn-back prod-volver', href: volver }, 'Volver al día del cliente'),
+    el('div', { class: 'card stack arm-intro', id: 'pex-intro' },
+      el('span', { class: 'cg-eyebrow', text: 'Extra de hoy · ' + fmtFecha(hoy) }),
+      el('h2', { class: 'arm-titulo', id: 'pex-nombre', text: nombre }),
+      el('p', { class: 'muted small', text: 'Tocá + en lo que se llevó además de su pedido. Queda como entregado y Finanzas lo confirma.' })),
+    zona);
+  leer(ctx, zona, 'prod_catalogo', { persona_id: pid }, (d) => {
+    const productos = ordenarProductos(listaDe(d, 'productos', 'catalogo').map(normProducto).filter(Boolean));
+    if (!productos.length) return montar(zona, vacio('No hay productos activos para cargar.'));
+    const porId = new Map(productos.map(p => [p.producto_id, p]));
+    const iObs = el('textarea', { class: 'input', id: 'pex-obs', maxlength: '300', rows: '2', placeholder: 'Opcional (ej. se lo llevó al mediodía)' });
+    const arm = armadorPedido({
+      productos, titulo: 'Carrito', textoEnviar: 'Registrar extra', idEnviar: 'pex-registrar', idAviso: 'pex-aviso', sinDetalle: true,
+      notaTotal: 'Con los precios de este cliente. El importe final lo calcula el sistema.',
+      pie: el('div', { class: 'field' }, el('label', { for: 'pex-obs', text: 'Observación' }), iObs),
+      alEnviar: (items, zAviso) => confirmarYEnviar(items, zAviso),
+    });
+    montar(zona, arm.nodo);
+    async function confirmarYEnviar(items, zAviso) {
+      const lineas = items.map(i => ({ producto_id: i.producto_id, cantidad: i.cantidad }));
+      let total = 0; let completo = true;
+      for (const l of lineas) { const p = porId.get(l.producto_id); if (p && p.precio !== null) total += l.cantidad * p.precio; else completo = false; }
+      const resumen = lineas.map(l => { const p = porId.get(l.producto_id) || {}; return (p.nombre || 'Producto') + ': ' + cant(l.cantidad, p.unidad); }).join(' · ');
+      if (!(await confirmar('Confirmar extra', nombre + ' — hoy. ' + resumen + '. Total: ' + (completo ? pesos(redondo(total)) : 'lo calcula el sistema') + '. ¿Lo registramos?', 'Registrar'))) return;
+      const campos = { persona_id: pid, fecha: hoy, lineas };
+      if (iObs.value.trim()) campos.observacion = iObs.value.trim().slice(0, 300);
+      await enviar(campos, zAviso);
     }
-    montar(zTotal, el('span', { text: 'Total del extra' }), el('strong', { text: algo ? pesos(redondo(t)) : pesos(0) }));
-    if (sinPrecio) zTotal.appendChild(el('small', { class: 'muted', text: 'Hay productos sin precio: el importe final lo calcula el sistema.' }));
-    return redondo(t);
-  };
-  const agregar = () => {
-    const k = filas.length ? Math.max(...filas.map(f => f.k)) + 1 : 0;
-    const sProd = el('select', { class: 'select', id: 'pex-prod-' + k, 'aria-label': 'Producto' }, opciones());
-    const iCant = el('input', { class: 'input input-num', id: 'pex-cant-' + k, type: 'number', min: '0', step: 'any', inputmode: 'decimal', placeholder: 'Cantidad', 'aria-label': 'Cantidad' });
-    const quitar = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-accion': 'quitar-linea' }, 'Quitar');
-    const det = el('span', { class: 'muted small pex-det' });
-    const nodo = el('div', { class: 'lin-fila', 'data-fila': String(k) }, sProd, iCant, det, quitar);
-    const f = { k, nodo, sProd, iCant, det };
-    quitar.addEventListener('click', () => { if (filas.length <= 1) { sProd.value = ''; iCant.value = ''; return recalcular(); } filas.splice(filas.indexOf(f), 1); nodo.remove(); recalcular(); });
-    filas.push(f); ed.insertBefore(nodo, bAg);
-  };
-  const bAg = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'pex-agregar', 'data-accion': 'agregar-linea', onclick: () => { agregar(); recalcular(); } }, 'Agregar otro producto');
-  ed.appendChild(bAg); agregar();
-  const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-    el('p', { class: 'muted small', text: 'Cargá lo que se llevó hoy además de su pedido. Queda como entregado y Finanzas lo confirma.' }),
-    ed, el('div', { class: 'field' }, el('label', { for: 'pex-obs', text: 'Observación' }), iObs), zTotal, bOk, zAviso);
-  form.addEventListener('input', recalcular); form.addEventListener('change', recalcular);
-  montar(cuerpo, form);
-  recalcular();
-
-  async function enviar(campos) {
-    montar(zAviso);
-    const r0 = await ops.ejecutar(ctx.base(TIPO), 'prod_registrar_extra', campos);
-    const enCurso = r0.r && r0.r.codigo === 'OPERACION_EN_CURSO';
-    if (r0.sinConfirmar || enCurso) return montar(zAviso, avisoSinConfirmar(enCurso ? 'EN_CURSO' : r0.falla, r0.operacion_id, () => enviar(campos), () => { ops.descartar('prod_registrar_extra', campos); montar(zAviso); }));
-    if (ctx.revisarFinSesion(r0.r)) return m.cerrar();
-    if (!r0.r.success) return montar(zAviso, avisoR(r0.r));
-    m.cerrar();
-    toast(r0.r.codigo === 'OPERACION_YA_PROCESADA' ? 'Ese extra ya estaba registrado. No se duplicó.' : 'Extra registrado. Queda para que Finanzas lo confirme.');
-    if (alTerminar) alTerminar(r0.r);
-  }
-  form.addEventListener('submit', conBloqueo(bOk, async () => {
-    montar(zAviso);
-    const lineas = []; const vistos = new Set();
-    for (const f of filas) {
-      const id = Number(f.sProd.value); const q = leerCant(f.iCant.value);
-      if (!f.sProd.value && !(q > 0)) continue; // fila vacía
-      if (!Number.isInteger(id) || !porId.has(id)) return montar(zAviso, aviso('error', 'Elegí el producto de cada renglón.'));
-      if (vistos.has(id)) return montar(zAviso, aviso('error', porId.get(id).nombre + ' está repetido: juntalo en un solo renglón.'));
-      if (!(q > 0)) return montar(zAviso, aviso('error', porId.get(id).nombre + ': poné una cantidad mayor que 0.'));
-      vistos.add(id); lineas.push({ producto_id: id, cantidad: q });
+    async function enviar(campos, zAviso) {
+      montar(zAviso);
+      const r0 = await ops.ejecutar(ctx.base(TIPO), 'prod_registrar_extra', campos);
+      const enCurso = r0.r && r0.r.codigo === 'OPERACION_EN_CURSO';
+      if (r0.sinConfirmar || enCurso) return montar(zAviso, avisoSinConfirmar(enCurso ? 'EN_CURSO' : r0.falla, r0.operacion_id, () => enviar(campos, zAviso), () => { ops.descartar('prod_registrar_extra', campos); montar(zAviso); }));
+      if (ctx.revisarFinSesion(r0.r)) return;
+      if (!r0.r.success) return montar(zAviso, avisoR(r0.r));
+      toast(r0.r.codigo === 'OPERACION_YA_PROCESADA' ? 'Ese extra ya estaba registrado. No se duplicó.' : 'Extra registrado. Queda para que Finanzas lo confirme.');
+      ctx.flash = { r: r0.r };
+      ctx.ir(volver);
     }
-    if (!lineas.length) return montar(zAviso, aviso('error', 'Elegí al menos un producto y su cantidad.'));
-    const total = recalcular();
-    const resumen = lineas.map(l => porId.get(l.producto_id).nombre + ': ' + cant(l.cantidad, porId.get(l.producto_id).unidad)).join(' · ');
-    if (!(await confirmar('Confirmar extra', cli.nombre + ' — hoy. ' + resumen + '. Total: ' + pesos(total) + '. ¿Lo registramos?', 'Registrar'))) return;
-    const campos = { persona_id: cli.pid, fecha: hoy, lineas };
-    if (iObs.value.trim()) campos.observacion = iObs.value.trim().slice(0, 300);
-    await enviar(campos);
-  }, 'Registrando…'));
+  });
 }
 
 // ======================= REGISTRAR DEVOLUCIÓN (solo descontar, precio del sistema) =======================

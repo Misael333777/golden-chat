@@ -33,7 +33,8 @@ export function fotoProducto(p, chica, cargar) {
 
 // opciones: { productos, iniciales: [{producto_id,cantidad,detalle_libre}], avisoDia (texto), alEnviar(items, zona) , alCancelar(), cargarFoto(producto_id),
 //   mostrarPrecios (por defecto true; Admin → false), titulo ('Tu pedido'), textoEnviar ('Enviar pedido'), idEnviar ('arm-enviar'),
-//   encabezado (nodo opcional arriba del carrito: p. ej. día, salida y repartidor en Admin), idAviso ('arm-aviso'), conservarIniciales (false) }
+//   encabezado (nodo opcional arriba del carrito: p. ej. día, salida y repartidor en Admin), idAviso ('arm-aviso'), conservarIniciales (false),
+//   sinDetalle (false: sin campo 'Aclaración' por producto; Producción), pie (nodo opcional debajo del total: p. ej. observación), notaTotal (texto bajo el total) }
 // Si alEnviar devuelve una promesa, el botón queda deshabilitado mientras se guarda (evita doble envío).
 // Devuelve { nodo }.
 export function armadorPedido(opc) {
@@ -115,7 +116,8 @@ export function armadorPedido(opc) {
     fuera.length ? el('div', { class: 'notice info small', id: 'arm-fuera' }, 'Ya no está disponible y se quitó: ' + fuera.join(', ') + '.') : null,
     cuerpoCarrito,
     conPrecio ? el('div', { class: 'arm-total' }, el('span', { class: 'arm-total-label', text: 'Total (estimado)' }), totalTxt) : null,
-    conPrecio ? el('p', { class: 'muted small', text: 'Es un estimado con tus precios de hoy: el importe final lo confirma Golden.' }) : null,
+    conPrecio ? el('p', { class: 'muted small', text: opc.notaTotal || 'Es un estimado con tus precios de hoy: el importe final lo confirma Golden.' }) : null,
+    opc.pie || null,
     zona, bEnviar, bCancelar);
 
   function actualizar() {
@@ -131,8 +133,8 @@ export function armadorPedido(opc) {
     else montar(cuerpoCarrito, items.map(x => {
       const sub = typeof x.p.precio === 'number' ? Math.round(x.p.precio * x.cantidad * 100) / 100 : null;
       if (sub === null) completo = false; else total += sub;
-      const iDet = el('input', { class: 'input arm-det', id: 'arm-det-' + x.pid, maxlength: '200', placeholder: 'Aclaración (opcional)', 'aria-label': 'Aclaración para ' + x.p.nombre, autocomplete: 'off', value: x.detalle });
-      iDet.addEventListener('input', () => { const c = carrito.get(x.pid); if (c) c.detalle = iDet.value; });
+      const iDet = opc.sinDetalle ? null : el('input', { class: 'input arm-det', id: 'arm-det-' + x.pid, maxlength: '200', placeholder: 'Aclaración (opcional)', 'aria-label': 'Aclaración para ' + x.p.nombre, autocomplete: 'off', value: x.detalle });
+      if (iDet) iDet.addEventListener('input', () => { const c = carrito.get(x.pid); if (c) c.detalle = iDet.value; });
       return el('div', { class: 'arm-item', 'data-producto': String(x.pid) },
         fotoProducto(x.p, true, opc.cargarFoto),
         el('div', { class: 'arm-item-txt' }, el('span', { class: 'arm-item-nombre', text: x.p.nombre }),
@@ -155,7 +157,7 @@ export function armadorPedido(opc) {
     for (const [pid, c] of carrito) {
       if (!(c.cantidad > 0)) return montar(zona, aviso('error', 'Cada producto necesita una cantidad mayor que 0.', 'DATOS_INCOMPLETOS'));
       const o = { producto_id: pid, cantidad: c.cantidad };
-      const det = String(c.detalle || '').trim(); if (det) o.detalle_libre = det;
+      const det = opc.sinDetalle ? '' : String(c.detalle || '').trim(); if (det) o.detalle_libre = det;
       items.push(o);
     }
     if (!items.length) return montar(zona, aviso('error', 'Agregá al menos un producto.', 'DATOS_INCOMPLETOS'));

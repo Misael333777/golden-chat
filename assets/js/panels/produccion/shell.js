@@ -1,11 +1,12 @@
 // Panel Producción (01/11). Mismo marco visual que Admin General / Admin Finanzas (assets/js/marco.js).
-// Rutas: #/produccion/inicio (Clientes) · #/produccion/cliente/<persona_id> (día del cliente) · #/produccion/catalogo.
+// Rutas: #/produccion/inicio (Clientes) · #/produccion/cliente/<persona_id> (día del cliente) · …/<persona_id>/extra (carrito del extra de hoy)
+// · #/produccion/catalogo.
 // Lecturas y escrituras con tipo 'produccion' y panel_activo 'produccion'; el backend vuelve a verificar el rol en cada acción.
 import { el, montar, conBloqueo, toast, textoPanel } from '../../ui.js';
 import * as ops from '../../ops.js';
 import { marco } from '../../marco.js';
 import { TIPO, avisoR, nombreCliente, cant } from './comun.js';
-import { vistaClientes, vistaDiaCliente } from './clientes.js';
+import { vistaClientes, vistaDiaCliente, vistaExtra } from './clientes.js';
 import { vistaCatalogo } from './catalogo.js';
 
 const MENU = [
@@ -20,12 +21,13 @@ export function vistaProduccion(ctx, partes) {
   const grupo = MENU.find(m => m.id === (sec === 'cliente' ? 'inicio' : sec));
   const avisos = el('div', { class: 'stack', id: 'prod-pendientes-ops' });
   const contenido = el('section', { class: 'stack', id: 'produccion-contenido' });
-  marco(ctx, { panel: 'produccion', base: '#/produccion', nav: MENU, grupo, sec, prefijo: 'prod-', zonas: [avisos], contenido,
-    sub: sec === 'cliente' ? 'Día del cliente' : null,
-    etiqueta: textoPanel('produccion'), rolTxt: textoPanel('produccion'), ariaMenu: 'Menú Producción', extraClase: 'admin-page produccion-page', pie: 'Lo de cada día, bien anotado.' });
+  marco(ctx, { panel: 'produccion', extraClase: 'admin-page produccion-page' + (partes[2] === 'extra' ? ' prod-extra-page' : ''), base: '#/produccion', nav: MENU, grupo, sec, prefijo: 'prod-', zonas: [avisos], contenido,
+    sub: sec === 'cliente' ? (partes[2] === 'extra' ? 'Registrar extra' : 'Día del cliente') : null,
+    etiqueta: textoPanel('produccion'), rolTxt: textoPanel('produccion'), ariaMenu: 'Menú Producción', pie: 'Lo de cada día, bien anotado.' });
   pintarPendientes(ctx, avisos);
   if (ctx.flash) { const f = ctx.flash; ctx.flash = null; if (f.r) avisos.appendChild(avisoR(f.r)); }
   if (sec === 'catalogo') return vistaCatalogo(ctx, contenido);
+  if (sec === 'cliente' && partes[2] === 'extra') return vistaExtra(ctx, contenido, pid);
   if (sec === 'cliente') return vistaDiaCliente(ctx, contenido, pid);
   return vistaClientes(ctx, contenido);
 }

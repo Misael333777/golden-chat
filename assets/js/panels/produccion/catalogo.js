@@ -1,5 +1,7 @@
-// Panel Producción → Catálogo: productos activos visibles para clientes (prod_catalogo sin cliente: sin precios).
+// Panel Producción → Catálogo: productos activos visibles para clientes (prod_catalogo sin cliente: sin precios), en tarjetas con foto.
+// Mismo look que el catálogo del panel Cliente (armador.js). prod_catalogo no devuelve imagen: se muestra el placeholder Golden.
 import { el, montar } from '../../ui.js';
+import { fotoProducto } from '../cliente/armador.js';
 import { listaDe, normProducto, ordenarProductos, uTxt, pesos, sinTilde, cabecera, vacio, leer } from './comun.js';
 
 export function vistaCatalogo(ctx, cont) {
@@ -7,7 +9,7 @@ export function vistaCatalogo(ctx, cont) {
   const total = el('p', { class: 'muted small', id: 'prod-cat-total' });
   const zona = el('div', { class: 'stack', id: 'prod-catalogo', 'data-estado': 'cargando' });
   montar(cont, cabecera('Catálogo', 'Productos activos que pueden pedir los clientes.'),
-    el('div', { class: 'card stack prod-buscador' }, el('div', { class: 'field' }, input), total), zona);
+    el('div', { class: 'field search-field arm-buscador' }, input), total, zona);
   let productos = [];
   const pintar = () => {
     const q = sinTilde(input.value.trim());
@@ -16,12 +18,14 @@ export function vistaCatalogo(ctx, cont) {
     if (!productos.length) return montar(zona, vacio('No hay productos activos.'));
     if (!vis.length) return montar(zona, vacio('No hay productos con ese nombre.'));
     const cats = [...new Set(vis.map(p => p.categoria || 'Otros'))];
-    montar(zona, cats.map(cat => el('div', { class: 'card stack prod-cat-grupo', 'data-categoria': cat },
-      el('h3', { text: cat }),
-      el('ul', { class: 'pp-lineas' }, vis.filter(p => (p.categoria || 'Otros') === cat).map(p => el('li', { 'data-producto': String(p.producto_id) },
-        el('span', { class: 'pp-prod', text: p.nombre }),
-        p.unidad ? el('span', { class: 'muted small', text: uTxt(p.unidad) }) : null,
-        p.precio !== null ? el('span', { class: 'small prod-cat-precio', text: pesos(p.precio) }) : null))))));
+    montar(zona, cats.map(cat => el('section', { class: 'stack prod-cat-grupo', 'data-categoria': cat },
+      el('h3', { class: 'prod-cat-titulo', text: cat }),
+      el('div', { class: 'arm-grilla' }, vis.filter(p => (p.categoria || 'Otros') === cat).map(p => el('article', { class: 'arm-card', 'data-producto': String(p.producto_id) },
+        fotoProducto(p, false),
+        el('div', { class: 'arm-card-txt' },
+          el('h4', { class: 'arm-nombre', text: p.nombre }),
+          el('p', { class: 'arm-precio' }, p.precio !== null ? el('strong', { text: pesos(p.precio) }) : null,
+            p.unidad ? el('span', { class: 'arm-unidad', text: (p.precio !== null ? ' / ' : 'Unidad: ') + uTxt(p.unidad) }) : null))))))));
   };
   input.addEventListener('input', pintar);
   leer(ctx, zona, 'prod_catalogo', {}, (d) => {
