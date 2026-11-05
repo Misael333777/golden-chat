@@ -82,7 +82,7 @@ export function vistaDiaCliente(ctx, cont, pid) {
   const sincronizar = () => {
     const esHoy = fecha === hoyART();
     bExtra.disabled = !esHoy;
-    ayuda.textContent = esHoy ? 'El extra es lo que se le entregó hoy además de su pedido. Lo confirma Finanzas.' : 'Los extras se registran solo en el día de hoy.';
+    ayuda.textContent = esHoy ? 'El extra es lo que se le entregó hoy además de su pedido. Se suma solo a su cuenta.' : 'Los extras se registran solo en el día de hoy.';
     const conLineas = !!(dia && Array.isArray(dia.lineas) && dia.lineas.some(l => l.disponible > 0));
     bDev.disabled = !conLineas;
     fechaTxt.textContent = fmtFecha(fecha) + (esHoy ? ' (hoy)' : '');
@@ -161,7 +161,7 @@ export function vistaExtra(ctx, cont, pid) {
     el('div', { class: 'card stack arm-intro', id: 'pex-intro' },
       el('span', { class: 'cg-eyebrow', text: 'Extra de hoy · ' + fmtFecha(hoy) }),
       el('h2', { class: 'arm-titulo', id: 'pex-nombre', text: nombre }),
-      el('p', { class: 'muted small', text: 'Tocá + en lo que se llevó además de su pedido. Queda como entregado y Finanzas lo confirma.' })),
+      el('p', { class: 'muted small', text: 'Tocá + en lo que se llevó además de su pedido. Queda como entregado y se suma solo a su cuenta.' })),
     zona);
   leer(ctx, zona, 'prod_catalogo', { persona_id: pid }, (d) => {
     const productos = ordenarProductos(listaDe(d, 'productos', 'catalogo').map(normProducto).filter(Boolean));
@@ -192,7 +192,8 @@ export function vistaExtra(ctx, cont, pid) {
       if (r0.sinConfirmar || enCurso) return montar(zAviso, avisoSinConfirmar(enCurso ? 'EN_CURSO' : r0.falla, r0.operacion_id, () => enviar(campos, zAviso), () => { ops.descartar('prod_registrar_extra', campos); montar(zAviso); }));
       if (ctx.revisarFinSesion(r0.r)) return;
       if (!r0.r.success) return montar(zAviso, avisoR(r0.r));
-      toast(r0.r.codigo === 'OPERACION_YA_PROCESADA' ? 'Ese extra ya estaba registrado. No se duplicó.' : 'Extra registrado. Queda para que Finanzas lo confirme.');
+      toast(r0.r.codigo === 'OPERACION_YA_PROCESADA' ? 'Ese extra ya estaba registrado. No se duplicó.'
+        : (r0.r.datos && r0.r.datos.cobrado ? 'Extra registrado. Ya se sumó a la cuenta del cliente.' : 'Extra registrado. El cargo queda pendiente para que Finanzas lo confirme.')); // 05/11: cobro automático
       ctx.flash = { r: r0.r };
       ctx.ir(volver);
     }

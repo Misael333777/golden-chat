@@ -6,7 +6,7 @@ import { pesos, fmtFecha, tile, cabecera, tabla, leer, operacion, resumenOp, fil
 
 export function vistaExtras(ctx, cont) {
   const cuerpo = el('div', { class: 'stack', id: 'fx-cuerpo', 'data-estado': 'cargando' });
-  montar(cont, cabecera('Extras', 'Cargos de extras entregados. Revisá cada uno y confirmalo para que pase a la cuenta corriente.'), cuerpo);
+  montar(cont, cabecera('Extras', 'Desde el 05/11 los extras que cargan Admin General y Producción se suman solos a la cuenta del cliente (llega un aviso). Acá quedan solo los que no se pudieron anotar solos: revisalos y confirmalos.'), cuerpo);
   leer(ctx, cuerpo, 'extras_finanzas', {}, (d) => {
     const fila = (x, extra, accion) => ({ dataset: { fin: x.fin || '' }, celdas: [x.nombre || x.persona_id || '—', x.pedido_id || '—', pesos(x.importe), extra(x)].concat(accion ? [accion(x)] : []) });
     const bloque = (titulo, id, lista, col, extra, textoVacio, accion) => el('div', { class: 'stack' }, el('h3', { text: titulo + ' (' + lista.length + ')' }),
