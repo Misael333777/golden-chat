@@ -23,16 +23,17 @@ const itemCls = (i) => (i.importe > 0 ? 'mas' : i.importe < 0 ? 'menos' : '');
 const diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 86400e3) + 1;
 
 // Filas de totales (texto, importe con signo, clase). Una sola fuente para pantalla, impresión e imagen.
+// 05/11 (pedido del usuario): resumen simple = pedidos del período + lo que quedaba de antes. "Deuda anterior" ya tiene descontados
+// los pagos y los ajustes del período (no se muestran por separado). Total = pedidos del período + deuda anterior (igual que antes).
 function resumen(d) {
-  const filas = [['Total de pedidos del período', plata(d.total_pedidos), '']];
-  if (d.saldo_anterior > 0) filas.push(['Deuda anterior', '+ ' + plata(d.saldo_anterior), 'deuda']);
-  if (d.saldo_anterior < 0) filas.push(['Saldo a favor anterior', '− ' + plata(d.saldo_anterior), 'favor']);
-  if (d.pagos_periodo !== 0) filas.push(['Pagos del período' + (d.fechas_pagos.length ? ' (' + d.fechas_pagos.map(dm).join(', ') + ')' : ''), (d.pagos_periodo < 0 ? '− ' : '+ ') + plata(d.pagos_periodo), d.pagos_periodo < 0 ? 'favor' : 'deuda']);
-  if (d.ajustes_periodo !== 0) filas.push(['Ajustes del período', (d.ajustes_periodo < 0 ? '− ' : '+ ') + plata(d.ajustes_periodo), d.ajustes_periodo < 0 ? 'favor' : 'deuda']);
+  const previo = Math.round(((d.saldo_anterior || 0) + (d.pagos_periodo || 0) + (d.ajustes_periodo || 0)) * 100) / 100;
+  const filas = [['Pedidos del período', plata(d.total_pedidos), '']];
+  if (previo < 0) filas.push(['A favor de antes', '− ' + plata(previo), 'favor']);
+  else filas.push(['Deuda anterior', (previo > 0 ? '+ ' : '') + plata(previo), previo > 0 ? 'deuda' : '']);
   const t = d.total_a_pagar;
   const final = t < 0 ? { txt: 'Le queda a favor', val: plata(t), cls: 'favorfin' } : { txt: 'Total a pagar', val: plata(t), cls: 'pagar' };
   const notas = [];
-  if (d.saldo_anterior > 0) notas.push('Deuda anterior = lo que debía antes del ' + dmy(d.fecha_desde) + '.');
+  if (previo !== 0) notas.push((previo > 0 ? 'Deuda anterior' : 'A favor de antes') + ' = lo que quedaba de antes del ' + dmy(d.fecha_desde) + ', ya descontados los pagos y descuentos.');
   if (t < 0) notas.push('No tiene nada para pagar. El saldo a favor se descuenta de los próximos pedidos.');
   if (d.dias_sin_importe > 0) notas.push('Hay ' + d.dias_sin_importe + (d.dias_sin_importe === 1 ? ' día' : ' días') + ' con importe a confirmar (no suman al total).');
   if (!d.dias.length) notas.push('No hay pedidos en planillas cerradas de este período.');
