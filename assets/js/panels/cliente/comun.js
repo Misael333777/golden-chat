@@ -58,7 +58,7 @@ export const listaLineas = (ls, id) => (!ls || !ls.length) ? el('p', { class: 'm
 
 // Mensajes claros por código (el código del backend se muestra siempre al lado).
 const MSJ = {
-  PRODUCCION_CERRADA: 'La producción de esa fecha ya está cerrada o pasó el horario de corte (22:00 del día anterior). Ya no se puede cambiar el pedido de ese día.',
+  PRODUCCION_CERRADA: 'La producción de esa fecha ya está cerrada o pasó el horario de corte (22:30 del día anterior). Ya no se puede cambiar el pedido de ese día.',
   CIERRE_EN_CURSO: 'Golden está cerrando la producción. Probá de nuevo en unos minutos.',
   PRODUCTO_NO_DISPONIBLE: 'Algún producto ya no está disponible. Elegí otro del catálogo.',
   FILA_NO_ENCONTRADA: 'No encontramos esa línea de tu habitual. Actualizá la pantalla.',

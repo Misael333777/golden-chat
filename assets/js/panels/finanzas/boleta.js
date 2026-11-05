@@ -66,7 +66,7 @@ function cssEnPagina() {
 
 export function abrirBoleta(ctx, quien) {
   const hoy = hoyART();
-  const maxF = sumarDias(hoy, 1); // la planilla de mañana ya está cerrada desde las 22:01
+  const maxF = sumarDias(hoy, 1); // la planilla de mañana ya está cerrada desde las 22:31
   const iDesde = entrada('bol-desde', { type: 'date', max: maxF }); iDesde.value = hoy;
   const iHasta = entrada('bol-hasta', { type: 'date', max: maxF }); iHasta.value = hoy;
   const bVer = el('button', { type: 'submit', class: 'btn btn-gold', id: 'bol-ver' }, 'Ver boleta');
