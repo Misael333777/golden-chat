@@ -66,11 +66,13 @@ export function vistaSueldos(ctx, cont) {
     const tarifa = !e.tarifa ? 'Sin sueldo cargado' : e.tarifa.tipo === 'jornadas'
       ? e.tarifa.tarifas.map(x => x.etiqueta + ' ' + pesos(x.importe)).join(' · ')
       : (e.tarifa.tipo === 'diario' ? pesos(e.tarifa.importe) + ' por día · hora extra ' + pesos(e.tarifa.hora_extra) : pesos(e.tarifa.importe) + ' (' + e.tarifa.tipo + ')');
+    const trasladoTxt = e.traslado ? ' · traslado pan ' + pesos(e.traslado) + ' por día' : '';
     const a = e.asistencia || { dias: {}, horas_extra: {} };
     const jornadas = e.tarifa && e.tarifa.tipo === 'jornadas';
     const resumenDias = !a.cargada ? 'Sin cargar' : jornadas
-      ? ['normal ' + fnum(a.dias.normal), '4 hs ' + fnum(a.dias.cuatro_horas), 'reparto ' + fnum(a.dias.reparto)].join(' · ') + ' · extras ' + fnum(a.horas_extra.normal) + ' + ' + fnum(a.horas_extra.reparto) + ' h'
+      ? ['normal ' + fnum(a.dias.normal), '4 hs ' + fnum(a.dias.cuatro_horas), 'reparto ' + fnum(a.dias.reparto)].join(' · ') + ' · ' + fnum((a.horas_extra.normal || 0) + (a.horas_extra.reparto || 0)) + ' h extra'
       : fnum(a.dias.normal) + ' días · ' + fnum(a.horas_extra.normal) + ' h extra';
+    const resumenTraslado = a.cargada && e.traslado ? ' · traslado pan ' + fnum(a.dias.traslado || 0) + ' días' : '';
     const b = (txt, cls, fn, id) => { const x = el('button', { type: 'button', class: 'btn btn-sm ' + cls, 'data-emp': e.empleado_id, id }, txt); x.addEventListener('click', fn); return x; };
     const pagar = liq && /^DEU-[0-9A-F]{16}$/.test(liq.deuda_id || '') ? el('a', { class: 'btn btn-sm btn-gold', href: '#/finanzas/pagar/deuda/' + liq.deuda_id, 'data-emp': e.empleado_id }, 'Pagar') : null;
     const acciones = liq ? [pagar, b('Imprimir', 'btn-ghost', () => imprimir(e, datos.periodo))]
@@ -81,8 +83,8 @@ export function vistaSueldos(ctx, cont) {
     return el('div', { class: 'card stack sl-emp', 'data-emp': e.empleado_id },
       el('div', { class: 'card-head' }, el('h3', { text: e.nombre }), el('span', { class: 'spacer' }),
         liq ? el('span', { class: 'chip ok', text: 'Liquidado ' + ddmm(liq.fecha) }) : null),
-      el('p', { class: 'muted small', text: tarifa }),
-      el('p', { class: 'small', text: 'Mes: ' + resumenDias }),
+      el('p', { class: 'muted small', text: tarifa + trasladoTxt }),
+      el('p', { class: 'small', text: 'Mes: ' + resumenDias + resumenTraslado }),
       (e.lineas || []).length ? el('div', { class: 'stack small' }, e.lineas.map(l => el('div', { class: 'row' }, el('span', { text: l.concepto + ' ' + fnum(l.cantidad) + ' × ' + pesos(l.unitario) }), el('span', { class: 'spacer' }), el('span', { text: pesos(l.importe) })))) : null,
       (e.mercaderia || []).map(m => filaNov('Se llevó ' + ddmm(m.fecha) + ': ' + fnum(m.cantidad) + ' ' + (m.unidad || '') + ' ' + m.producto, m.importe, m.novedad_id)),
       (e.adelantos || []).map(x => filaNov('Adelanto ' + ddmm(x.fecha) + ' (' + x.cuenta + ')', x.importe, x.novedad_id)),
@@ -108,23 +110,27 @@ export function vistaSueldos(ctx, cont) {
     const inp = (id, v, step) => el('input', { class: 'input input-num', id, type: 'number', min: '0', step: step || '0.5', inputmode: 'decimal', value: a.cargada ? String(v || 0) : '' });
     const campo = (id, txt, i) => el('div', { class: 'field' }, el('label', { for: id, text: txt }), i);
     const f = jornadas
-      ? { dn: inp('sl-d-normal', a.dias.normal), d4: inp('sl-d-cuatro', a.dias.cuatro_horas), dr: inp('sl-d-reparto', a.dias.reparto), hn: inp('sl-h-normal', a.horas_extra.normal), hr: inp('sl-h-reparto', a.horas_extra.reparto) }
+      ? { dn: inp('sl-d-normal', a.dias.normal), d4: inp('sl-d-cuatro', a.dias.cuatro_horas), dr: inp('sl-d-reparto', a.dias.reparto), hn: inp('sl-h-normal', (a.horas_extra.normal || 0) + (a.horas_extra.reparto || 0)) }
       : { dn: inp('sl-d-normal', a.dias.normal), hn: inp('sl-h-normal', a.horas_extra.normal) };
+    // 06/11: traslado de pan (llevar pan de una panadería a otra), solo para quien tiene ese importe (Isma y Franco).
+    if (e.traslado) f.dt = inp('sl-d-traslado', a.dias.traslado);
+    const campoTraslado = e.traslado ? campo('sl-d-traslado', 'Traslado pan (' + pesos(e.traslado) + ' c/u)', f.dt) : null;
     const zona = el('div', { class: 'stack' });
     const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-dias-guardar' }, 'Guardar');
     const m = modal('Días de ' + nombreMes(datos.periodo) + ' — ' + e.nombre, el('div', { class: 'stack' },
       el('p', { class: 'muted small', text: 'Copiá lo que dice la planilla firmada. Se pueden poner medios días o medias horas (0,5).' }),
       jornadas ? el('div', { class: 'form-grid' }, campo('sl-d-normal', 'Días de jornada normal', f.dn), campo('sl-d-cuatro', 'Días de 4 horas', f.d4), campo('sl-d-reparto', 'Días de 8 hs con reparto', f.dr),
-        campo('sl-h-normal', 'Horas extra en jornada normal', f.hn), campo('sl-h-reparto', 'Horas extra en días con reparto', f.hr))
-        : el('div', { class: 'form-grid' }, campo('sl-d-normal', 'Días trabajados', f.dn), campo('sl-h-normal', 'Horas extra', f.hn)),
+        campo('sl-h-normal', 'Horas extra', f.hn), campoTraslado)
+        : el('div', { class: 'form-grid' }, campo('sl-d-normal', 'Días trabajados', f.dn), campo('sl-h-normal', 'Horas extra', f.hn), campoTraslado),
       bOk, zona));
     bOk.addEventListener('click', conBloqueo(bOk, async () => {
       montar(zona);
       const v = Object.fromEntries(Object.entries(f).map(([k, i]) => [k, leerNum(i.value)]));
       if (Object.values(v).some(x => !Number.isFinite(x) || x < 0)) return montar(zona, aviso('error', 'Revisá los números.'));
       const campos = { empleado_id: e.empleado_id, periodo: datos.periodo,
-        dias: jornadas ? { normal: v.dn, cuatro_horas: v.d4, reparto: v.dr } : { normal: v.dn },
-        horas_extra: jornadas ? { normal: v.hn, reparto: v.hr } : { normal: v.hn } };
+        dias: Object.assign(jornadas ? { normal: v.dn, cuatro_horas: v.d4, reparto: v.dr } : { normal: v.dn }, e.traslado ? { traslado: v.dt } : {}),
+        // 06/11: Liam ya no tiene horas extra con reparto; todas se pagan como las del día común.
+        horas_extra: jornadas ? { normal: v.hn, reparto: 0 } : { normal: v.hn } };
       await enviar('sueldos_asistencia', campos, zona, (r) => terminar(m, r));
     }, 'Guardando…'));
   }
