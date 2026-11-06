@@ -188,31 +188,56 @@ export function vistaSueldos(ctx, cont) {
     }, 'Guardando…'));
   }
 
+  // 06/11: se pueden cargar varios adelantos de una vez (cada uno con su importe, fecha y cuenta). Cada uno sale de su cuenta.
   function abrirAdelanto(e) {
     const ctas = datos.cuentas || [];
-    const iImp = el('input', { class: 'input input-num', id: 'sl-a-imp', type: 'text', inputmode: 'decimal', placeholder: 'Importe' });
-    const sel = el('select', { class: 'select', id: 'sl-a-cta' }, el('option', { value: '', text: '¿De qué cuenta sale?' }), ctas.map(k => el('option', { value: k.cuenta_id, text: k.nombre })));
-    const iFecha = el('input', { class: 'input', id: 'sl-a-fecha', type: 'date', value: hoyART() <= finMes(datos.periodo) ? hoyART() : finMes(datos.periodo), max: hoyART() });
+    const fechaDef = hoyART() <= finMes(datos.periodo) ? hoyART() : finMes(datos.periodo);
+    const filas = [];
+    const lista = el('div', { class: 'stack', id: 'sl-a-lista' });
+    const total = el('p', { class: 'small', id: 'sl-a-total' });
+    const calc = () => { const t = filas.reduce((a, f) => a + (numero(f.imp.value) > 0 ? Math.round(numero(f.imp.value) * 100) : 0), 0); total.textContent = filas.length > 1 && t ? 'Total de adelantos: ' + pesos(t / 100) : ''; };
+    const agregarFila = () => {
+      const n = filas.length + 1, prev = filas[filas.length - 1];
+      const f = { imp: el('input', { class: 'input input-num', id: 'sl-a-imp-' + n, type: 'text', inputmode: 'decimal', placeholder: 'Importe', 'aria-label': 'Importe ' + n }),
+        fecha: el('input', { class: 'input', id: 'sl-a-fecha-' + n, type: 'date', value: prev ? prev.fecha.value : fechaDef, max: hoyART(), 'aria-label': 'Fecha ' + n }),
+        cta: el('select', { class: 'select', id: 'sl-a-cta-' + n, 'aria-label': 'Cuenta ' + n }, el('option', { value: '', text: '¿De qué cuenta sale?' }), ctas.map(k => el('option', { value: k.cuenta_id, text: k.nombre }))) };
+      if (prev) f.cta.value = prev.cta.value;
+      const quitar = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'aria-label': 'Quitar' }, '✕');
+      f.nodo = el('div', { class: 'row sl-a-fila' }, f.imp, f.fecha, f.cta, quitar);
+      quitar.addEventListener('click', () => { if (filas.length === 1) return; filas.splice(filas.indexOf(f), 1); f.nodo.remove(); calc(); });
+      f.imp.addEventListener('input', calc);
+      filas.push(f); lista.appendChild(f.nodo); f.imp.focus();
+    };
+    const bMas = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'sl-a-mas' }, '+ Agregar otro adelanto');
+    bMas.addEventListener('click', agregarFila);
     const iNota = el('input', { class: 'input', id: 'sl-a-nota', maxlength: '200', placeholder: 'Nota (opcional)' });
     const zona = el('div', { class: 'stack' });
-    const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-a-guardar' }, 'Registrar adelanto');
+    const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-a-guardar' }, 'Registrar');
     const m = modal('Adelanto — ' + e.nombre, el('div', { class: 'stack' },
-      el('p', { class: 'muted small', text: 'La plata sale ahora de la cuenta elegida y se descuenta del sueldo de ' + nombreMes(datos.periodo) + '.' }),
-      el('div', { class: 'form-grid' }, el('div', { class: 'field' }, el('label', { for: 'sl-a-imp', text: 'Importe' }), iImp),
-        el('div', { class: 'field' }, el('label', { for: 'sl-a-cta', text: 'Cuenta' }), sel),
-        el('div', { class: 'field' }, el('label', { for: 'sl-a-fecha', text: 'Fecha' }), iFecha),
-        el('div', { class: 'field' }, el('label', { for: 'sl-a-nota', text: 'Nota' }), iNota)),
-      bOk, zona));
+      el('p', { class: 'muted small', text: 'La plata sale ahora de la cuenta elegida y se descuenta del sueldo de ' + nombreMes(datos.periodo) + '. Podés cargar varios adelantos.' }),
+      lista, bMas,
+      el('div', { class: 'field' }, el('label', { for: 'sl-a-nota', text: 'Nota' }), iNota),
+      total, bOk, zona));
+    agregarFila();
+    let guardados = 0;
     bOk.addEventListener('click', conBloqueo(bOk, async () => {
       montar(zona);
-      const imp = numero(iImp.value);
-      if (!(imp > 0)) return montar(zona, aviso('error', 'Poné el importe.'));
-      if (!sel.value) return montar(zona, aviso('error', 'Elegí la cuenta.'));
-      if (!FECHA_RE.test(iFecha.value)) return montar(zona, aviso('error', 'Elegí la fecha.'));
-      if (!(await confirmar('Confirmar adelanto', 'Adelanto de ' + pesos(imp) + ' a ' + e.nombre + ' desde ' + sel.options[sel.selectedIndex].text + '. ¿Confirmás?', 'Registrar'))) return;
-      const campos = { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: iFecha.value, importe: imp, cuenta_financiera_id: sel.value };
-      if (iNota.value.trim()) campos.nota = iNota.value.trim();
-      await enviar('sueldos_adelanto', campos, zona, (r) => terminar(m, r));
+      const items = filas.map(f => ({ f, imp: numero(f.imp.value) }));
+      if (items.some(x => !(x.imp > 0))) return montar(zona, aviso('error', 'Poné el importe en cada renglón (o quitá el que sobra).'));
+      if (items.some(x => !x.f.cta.value)) return montar(zona, aviso('error', 'Elegí la cuenta en cada renglón.'));
+      if (items.some(x => !FECHA_RE.test(x.f.fecha.value))) return montar(zona, aviso('error', 'Elegí la fecha en cada renglón.'));
+      const tot = items.reduce((a, x) => a + Math.round(x.imp * 100), 0) / 100;
+      const txt = items.length === 1 ? 'Adelanto de ' + pesos(items[0].imp) + ' a ' + e.nombre + ' desde ' + items[0].f.cta.options[items[0].f.cta.selectedIndex].text + '. ¿Confirmás?'
+        : items.length + ' adelantos a ' + e.nombre + ' por ' + pesos(tot) + ' en total. ¿Confirmás?';
+      if (!(await confirmar('Confirmar adelanto', txt, 'Registrar'))) return;
+      for (const x of items) {
+        const campos = { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: x.f.fecha.value, importe: x.imp, cuenta_financiera_id: x.f.cta.value };
+        if (iNota.value.trim()) campos.nota = iNota.value.trim();
+        const r = await enviar('sueldos_adelanto', campos, zona, null);
+        if (!r) { if (guardados) montar(zona, aviso('error', 'Se guardaron ' + guardados + ' y falló uno. Los que ya se guardaron se sacaron de la lista: volvé a tocar Registrar para el resto.')); return; }
+        guardados += 1; filas.splice(filas.indexOf(x.f), 1); x.f.nodo.remove(); calc();
+      }
+      terminar(m, { mensaje: guardados === 1 ? 'Adelanto registrado.' : 'Se registraron ' + guardados + ' adelantos.' });
     }, 'Registrando…'));
   }
 
