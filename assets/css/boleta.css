@@ -11,6 +11,7 @@
 .gb-final{margin-top:6px;padding:10px 12px;border-radius:10px;font-size:16px;align-items:center}.gb-final b{font-size:20px}
 .gb-final.pagar{background:#FBF3E3;border:1.5px solid #C9994A}.gb-final.favorfin{background:rgba(63,125,87,.10);border:1.5px solid #3F7D57}
 .gb-nota{font-size:12px;color:#6B6350;margin:8px 0 0}.gb-leg{font-size:10px;color:#9A917B;text-align:center;margin:14px 0 0;border-top:1px solid #EFE6D0;padding-top:8px}
+.gb-det{margin:10px 0 0;font-size:12px}.gb-det-t{color:#6B6350;font-weight:600;margin-bottom:2px}.gb-det .gb-it{padding-right:0}.gb-det .gb-it span:last-child{color:#241F16}
 .btn.btn-wsp{background:#25D366;border-color:#25D366;color:#fff}
 .btn.btn-wsp:hover{background:#1EBE5A;border-color:#1EBE5A}
 body.gb-print{margin:0;background:#fff}body.gb-print .gb{border:none;max-width:none}
