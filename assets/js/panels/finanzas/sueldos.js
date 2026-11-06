@@ -1,6 +1,8 @@
 // Admin Finanzas → Cuentas por pagar → Sueldos (26/10). Liquidación mensual por jornada, copiada de la planilla firmada.
 // - Por empleado: días trabajados (Liam: por tipo de jornada) y horas extra del mes.
 // - Mercadería que se llevó (a precio mayorista) y adelantos (sale plata de una cuenta): se descuentan.
+// - 06/11: Descuentos (por un fallo, etc.): se restan del sueldo, no mueven plata. Todo va al mes que se está mirando
+//   (un adelanto del 4/11 cargado viendo octubre se descuenta de octubre).
 // - Liquidar: arma el sueldo del mes y lo deja en Deudas para pagar (con los adelantos ya descontados).
 // El backend (GOLDEN - Sueldos) valida y calcula todo; acá solo se muestra y se envía.
 import * as ops from '../../ops.js';
@@ -30,7 +32,7 @@ export function vistaSueldos(ctx, cont) {
   montar(cont,
     el('div', { class: 'card stack' },
       el('div', { class: 'card-head' }, el('h2', { text: 'Sueldos del mes' })),
-      el('p', { class: 'muted small', text: 'Cargá los días y horas extra de la planilla firmada, lo que se llevó cada uno y los adelantos. Del 1 al 10 liquidá el mes que cerró: queda como sueldo a pagar (botón Pagar).' }),
+      el('p', { class: 'muted small', text: 'Cargá los días y horas extra de la planilla firmada, lo que se llevó cada uno, los adelantos y los descuentos. Todo se descuenta del mes que estás mirando. Del 1 al 10 liquidá el mes que cerró: queda como sueldo a pagar (botón Pagar).' }),
       el('div', { class: 'row' }, el('div', { class: 'field' }, el('label', { for: 'sl-mes', text: 'Mes' }), iMes), bVer)),
     avisos, cuerpo);
   let datos = null;
@@ -72,7 +74,7 @@ export function vistaSueldos(ctx, cont) {
     const b = (txt, cls, fn, id) => { const x = el('button', { type: 'button', class: 'btn btn-sm ' + cls, 'data-emp': e.empleado_id, id }, txt); x.addEventListener('click', fn); return x; };
     const pagar = liq && /^DEU-[0-9A-F]{16}$/.test(liq.deuda_id || '') ? el('a', { class: 'btn btn-sm btn-gold', href: '#/finanzas/pagar/deuda/' + liq.deuda_id, 'data-emp': e.empleado_id }, 'Pagar') : null;
     const acciones = liq ? [pagar, b('Imprimir', 'btn-ghost', () => imprimir(e, datos.periodo))]
-      : [b('Cargar días', 'btn-primary', () => abrirDias(e), 'sl-dias-' + e.empleado_id), b('Se llevó', 'btn-ghost', () => abrirMercaderia(e)), b('Adelanto', 'btn-ghost', () => abrirAdelanto(e)),
+      : [b('Cargar días', 'btn-primary', () => abrirDias(e), 'sl-dias-' + e.empleado_id), b('Se llevó', 'btn-ghost', () => abrirMercaderia(e)), b('Adelanto', 'btn-ghost', () => abrirAdelanto(e)), b('Descuento', 'btn-ghost', () => abrirDescuento(e), 'sl-desc-' + e.empleado_id),
         b('Liquidar', 'btn-gold', () => abrirLiquidar(e), 'sl-liq-' + e.empleado_id)];
     const filaNov = (txt, imp, id) => el('div', { class: 'row small' }, el('span', { text: txt }), el('span', { class: 'spacer' }), el('span', { text: '− ' + pesos(imp) }),
       liq ? null : (() => { const x = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-anular': id }, 'Anular'); x.addEventListener('click', () => anular(id, txt)); return x; })());
@@ -84,6 +86,7 @@ export function vistaSueldos(ctx, cont) {
       (e.lineas || []).length ? el('div', { class: 'stack small' }, e.lineas.map(l => el('div', { class: 'row' }, el('span', { text: l.concepto + ' ' + fnum(l.cantidad) + ' × ' + pesos(l.unitario) }), el('span', { class: 'spacer' }), el('span', { text: pesos(l.importe) })))) : null,
       (e.mercaderia || []).map(m => filaNov('Se llevó ' + ddmm(m.fecha) + ': ' + fnum(m.cantidad) + ' ' + (m.unidad || '') + ' ' + m.producto, m.importe, m.novedad_id)),
       (e.adelantos || []).map(x => filaNov('Adelanto ' + ddmm(x.fecha) + ' (' + x.cuenta + ')', x.importe, x.novedad_id)),
+      (e.descuentos || []).map(x => filaNov('Descuento ' + ddmm(x.fecha) + ': ' + x.motivo, x.importe, x.novedad_id)),
       el('div', { class: 'row' }, el('strong', { text: 'A pagar' }), el('span', { class: 'spacer' }), el('strong', { class: 'sl-apagar', text: pesos(t.a_pagar) })),
       (e.avisos || []).length ? aviso('info', e.avisos.join(' ')) : null,
       el('div', { class: 'row' }, acciones));
@@ -138,7 +141,7 @@ export function vistaSueldos(ctx, cont) {
     const zona = el('div', { class: 'stack' });
     const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-m-guardar' }, 'Guardar');
     const m = modal('Se llevó — ' + e.nombre, el('div', { class: 'stack' },
-      el('p', { class: 'muted small', text: 'Se descuenta del sueldo a precio mayorista.' }),
+      el('p', { class: 'muted small', text: 'Se descuenta del sueldo de ' + nombreMes(datos.periodo) + ' a precio mayorista.' }),
       el('div', { class: 'form-grid' }, el('div', { class: 'field' }, el('label', { for: 'sl-m-prod', text: 'Producto' }), sel),
         el('div', { class: 'field' }, el('label', { for: 'sl-m-cant', text: 'Cantidad' }), iCant),
         el('div', { class: 'field' }, el('label', { for: 'sl-m-fecha', text: 'Fecha' }), iFecha),
@@ -150,7 +153,7 @@ export function vistaSueldos(ctx, cont) {
       if (!sel.value) return montar(zona, aviso('error', 'Elegí el producto.'));
       if (!(c > 0)) return montar(zona, aviso('error', 'Poné la cantidad.'));
       if (!FECHA_RE.test(iFecha.value)) return montar(zona, aviso('error', 'Elegí la fecha.'));
-      const campos = { empleado_id: e.empleado_id, fecha: iFecha.value, producto_id: Number(sel.value), cantidad: c };
+      const campos = { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: iFecha.value, producto_id: Number(sel.value), cantidad: c };
       if (iNota.value.trim()) campos.nota = iNota.value.trim();
       await enviar('sueldos_mercaderia', campos, zona, (r) => terminar(m, r));
     }, 'Guardando…'));
@@ -165,7 +168,7 @@ export function vistaSueldos(ctx, cont) {
     const zona = el('div', { class: 'stack' });
     const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-a-guardar' }, 'Registrar adelanto');
     const m = modal('Adelanto — ' + e.nombre, el('div', { class: 'stack' },
-      el('p', { class: 'muted small', text: 'La plata sale ahora de la cuenta elegida y se descuenta del sueldo del mes.' }),
+      el('p', { class: 'muted small', text: 'La plata sale ahora de la cuenta elegida y se descuenta del sueldo de ' + nombreMes(datos.periodo) + '.' }),
       el('div', { class: 'form-grid' }, el('div', { class: 'field' }, el('label', { for: 'sl-a-imp', text: 'Importe' }), iImp),
         el('div', { class: 'field' }, el('label', { for: 'sl-a-cta', text: 'Cuenta' }), sel),
         el('div', { class: 'field' }, el('label', { for: 'sl-a-fecha', text: 'Fecha' }), iFecha),
@@ -178,9 +181,33 @@ export function vistaSueldos(ctx, cont) {
       if (!sel.value) return montar(zona, aviso('error', 'Elegí la cuenta.'));
       if (!FECHA_RE.test(iFecha.value)) return montar(zona, aviso('error', 'Elegí la fecha.'));
       if (!(await confirmar('Confirmar adelanto', 'Adelanto de ' + pesos(imp) + ' a ' + e.nombre + ' desde ' + sel.options[sel.selectedIndex].text + '. ¿Confirmás?', 'Registrar'))) return;
-      const campos = { empleado_id: e.empleado_id, fecha: iFecha.value, importe: imp, cuenta_financiera_id: sel.value };
+      const campos = { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: iFecha.value, importe: imp, cuenta_financiera_id: sel.value };
       if (iNota.value.trim()) campos.nota = iNota.value.trim();
       await enviar('sueldos_adelanto', campos, zona, (r) => terminar(m, r));
+    }, 'Registrando…'));
+  }
+
+  // 06/11: descuento del sueldo (por un fallo, una rotura, etc.). No sale plata de ninguna cuenta.
+  function abrirDescuento(e) {
+    const iImp = el('input', { class: 'input input-num', id: 'sl-d-imp', type: 'text', inputmode: 'decimal', placeholder: 'Importe' });
+    const iFecha = el('input', { class: 'input', id: 'sl-d-fecha', type: 'date', value: hoyART() <= finMes(datos.periodo) ? hoyART() : finMes(datos.periodo), max: hoyART() });
+    const iMot = el('input', { class: 'input', id: 'sl-d-motivo', maxlength: '200', placeholder: 'Ej.: error en la elaboración de bizcochos' });
+    const zona = el('div', { class: 'stack' });
+    const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-d-guardar' }, 'Registrar descuento');
+    const m = modal('Descuento — ' + e.nombre, el('div', { class: 'stack' },
+      el('p', { class: 'muted small', text: 'Se resta del sueldo de ' + nombreMes(datos.periodo) + '. No sale plata de ninguna cuenta. El motivo sale en el recibo.' }),
+      el('div', { class: 'form-grid' }, el('div', { class: 'field' }, el('label', { for: 'sl-d-imp', text: 'Importe' }), iImp),
+        el('div', { class: 'field' }, el('label', { for: 'sl-d-fecha', text: 'Fecha' }), iFecha),
+        el('div', { class: 'field' }, el('label', { for: 'sl-d-motivo', text: 'Motivo' }), iMot)),
+      bOk, zona));
+    bOk.addEventListener('click', conBloqueo(bOk, async () => {
+      montar(zona);
+      const imp = numero(iImp.value);
+      if (!(imp > 0)) return montar(zona, aviso('error', 'Poné el importe.'));
+      if (!FECHA_RE.test(iFecha.value)) return montar(zona, aviso('error', 'Elegí la fecha.'));
+      if (iMot.value.trim().length < 3) return montar(zona, aviso('error', 'Escribí el motivo del descuento.'));
+      if (!(await confirmar('Confirmar descuento', 'Descontar ' + pesos(imp) + ' del sueldo de ' + nombreMes(datos.periodo) + ' de ' + e.nombre + '. ¿Confirmás?', 'Descontar'))) return;
+      await enviar('sueldos_descuento', { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: iFecha.value, importe: imp, nota: iMot.value.trim() }, zona, (r) => terminar(m, r));
     }, 'Registrando…'));
   }
 
@@ -239,6 +266,7 @@ function detalle(cal) {
     (cal.lineas || []).map(l => fila(l.concepto + ' ' + fnum(l.cantidad) + ' × ' + pesos(l.unitario), pesos(l.importe))),
     fila('Total trabajado', pesos(t.bruto), true),
     (cal.mercaderia || []).map(m => fila('Se llevó ' + ddmm(m.fecha) + ': ' + fnum(m.cantidad) + ' ' + (m.unidad || '') + ' ' + m.producto, '− ' + pesos(m.importe))),
+    (cal.descuentos || []).map(a => fila('Descuento ' + ddmm(a.fecha) + ': ' + a.motivo, '− ' + pesos(a.importe))),
     (cal.adelantos || []).map(a => fila('Adelanto ' + ddmm(a.fecha), '− ' + pesos(a.importe))),
     fila('A pagar', pesos(t.a_pagar), true));
 }
@@ -252,6 +280,7 @@ function imprimir(e, periodo) {
     + (e.lineas || []).map(l => fila(l.concepto + ' ' + fnum(l.cantidad) + ' × ' + pesos(l.unitario), pesos(l.importe))).join('')
     + fila('Total trabajado', pesos(t.bruto), 't')
     + (e.mercaderia || []).map(m => fila('Se llevó ' + ddmm(m.fecha) + ': ' + fnum(m.cantidad) + ' ' + (m.unidad || '') + ' ' + m.producto, '− ' + pesos(m.importe))).join('')
+    + (e.descuentos || []).map(a => fila('Descuento ' + ddmm(a.fecha) + ': ' + a.motivo, '− ' + pesos(a.importe))).join('')
     + (e.adelantos || []).map(a => fila('Adelanto ' + ddmm(a.fecha), '− ' + pesos(a.importe))).join('')
     + fila('A pagar', pesos(t.a_pagar), 't') + '</table><p class="m">Comprobante interno.</p></body></html>';
   const fr = el('iframe', { title: 'Impresión de sueldo', 'aria-hidden': 'true', class: 'gb-frame' });
