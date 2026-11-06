@@ -135,33 +135,56 @@ export function vistaSueldos(ctx, cont) {
     }, 'Guardando…'));
   }
 
+  // 06/11: se pueden cargar varios productos de una vez (misma fecha). Cada uno se guarda como un registro aparte.
   function abrirMercaderia(e) {
     const prods = datos.productos || [];
-    const sel = el('select', { class: 'select', id: 'sl-m-prod' }, el('option', { value: '', text: 'Elegí el producto' }), prods.map(p => el('option', { value: String(p.producto_id), text: p.nombre + ' (' + pesos(p.precio_mayorista) + (p.unidad ? ' por ' + p.unidad : '') + ')' })));
-    const iCant = el('input', { class: 'input input-num', id: 'sl-m-cant', type: 'text', inputmode: 'decimal', placeholder: 'Cantidad' });
+    const opciones = () => [el('option', { value: '', text: 'Elegí el producto' })].concat(prods.map(p => el('option', { value: String(p.producto_id), text: p.nombre + ' (' + pesos(p.precio_mayorista) + (p.unidad ? ' por ' + p.unidad : '') + ')' })));
+    const filas = [];
+    const lista = el('div', { class: 'stack', id: 'sl-m-lista' });
+    const total = el('p', { class: 'small', id: 'sl-m-total' });
+    const calc = () => {
+      let t = 0;
+      for (const f of filas) { const p = prods.find(x => String(x.producto_id) === f.sel.value); const c = leerNum(f.cant.value); if (p && c > 0) t += Math.round(p.precio_mayorista * c * 100); }
+      total.textContent = t ? 'Se descuenta en total: ' + pesos(t / 100) : '';
+    };
+    const agregarFila = () => {
+      const n = filas.length + 1;
+      const f = { sel: el('select', { class: 'select', id: 'sl-m-prod-' + n, 'aria-label': 'Producto ' + n }, opciones()),
+        cant: el('input', { class: 'input input-num', id: 'sl-m-cant-' + n, type: 'text', inputmode: 'decimal', placeholder: 'Cantidad', 'aria-label': 'Cantidad ' + n }) };
+      const quitar = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'aria-label': 'Quitar' }, '✕');
+      f.nodo = el('div', { class: 'row sl-m-fila' }, f.sel, f.cant, quitar);
+      quitar.addEventListener('click', () => { if (filas.length === 1) return; filas.splice(filas.indexOf(f), 1); f.nodo.remove(); calc(); });
+      f.sel.addEventListener('change', calc); f.cant.addEventListener('input', calc);
+      filas.push(f); lista.appendChild(f.nodo); f.sel.focus();
+    };
+    const bMas = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'sl-m-mas' }, '+ Agregar otro producto');
+    bMas.addEventListener('click', agregarFila);
     const iFecha = el('input', { class: 'input', id: 'sl-m-fecha', type: 'date', value: hoyART() <= finMes(datos.periodo) ? hoyART() : finMes(datos.periodo), max: hoyART() });
     const iNota = el('input', { class: 'input', id: 'sl-m-nota', maxlength: '200', placeholder: 'Nota (opcional)' });
-    const total = el('p', { class: 'small', id: 'sl-m-total' });
-    const calc = () => { const p = prods.find(x => String(x.producto_id) === sel.value); const c = leerNum(iCant.value); total.textContent = p && c > 0 ? 'Se descuenta: ' + pesos(Math.round(p.precio_mayorista * c * 100) / 100) : ''; };
-    sel.addEventListener('change', calc); iCant.addEventListener('input', calc);
     const zona = el('div', { class: 'stack' });
     const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-m-guardar' }, 'Guardar');
     const m = modal('Se llevó — ' + e.nombre, el('div', { class: 'stack' },
-      el('p', { class: 'muted small', text: 'Se descuenta del sueldo de ' + nombreMes(datos.periodo) + ' a precio mayorista.' }),
-      el('div', { class: 'form-grid' }, el('div', { class: 'field' }, el('label', { for: 'sl-m-prod', text: 'Producto' }), sel),
-        el('div', { class: 'field' }, el('label', { for: 'sl-m-cant', text: 'Cantidad' }), iCant),
-        el('div', { class: 'field' }, el('label', { for: 'sl-m-fecha', text: 'Fecha' }), iFecha),
+      el('p', { class: 'muted small', text: 'Se descuenta del sueldo de ' + nombreMes(datos.periodo) + ' a precio mayorista. Podés cargar varios productos.' }),
+      lista, bMas,
+      el('div', { class: 'form-grid' }, el('div', { class: 'field' }, el('label', { for: 'sl-m-fecha', text: 'Fecha' }), iFecha),
         el('div', { class: 'field' }, el('label', { for: 'sl-m-nota', text: 'Nota' }), iNota)),
       total, bOk, zona));
+    agregarFila();
+    let guardados = 0;
     bOk.addEventListener('click', conBloqueo(bOk, async () => {
       montar(zona);
-      const c = leerNum(iCant.value);
-      if (!sel.value) return montar(zona, aviso('error', 'Elegí el producto.'));
-      if (!(c > 0)) return montar(zona, aviso('error', 'Poné la cantidad.'));
+      const items = filas.map(f => ({ f, c: leerNum(f.cant.value) }));
+      if (items.some(x => !x.f.sel.value)) return montar(zona, aviso('error', 'Elegí el producto en cada renglón (o quitá el que sobra).'));
+      if (items.some(x => !(x.c > 0))) return montar(zona, aviso('error', 'Poné la cantidad en cada renglón.'));
       if (!FECHA_RE.test(iFecha.value)) return montar(zona, aviso('error', 'Elegí la fecha.'));
-      const campos = { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: iFecha.value, producto_id: Number(sel.value), cantidad: c };
-      if (iNota.value.trim()) campos.nota = iNota.value.trim();
-      await enviar('sueldos_mercaderia', campos, zona, (r) => terminar(m, r));
+      for (const x of items) {
+        const campos = { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: iFecha.value, producto_id: Number(x.f.sel.value), cantidad: x.c };
+        if (iNota.value.trim()) campos.nota = iNota.value.trim();
+        const r = await enviar('sueldos_mercaderia', campos, zona, null);
+        if (!r) { if (guardados) montar(zona, aviso('error', 'Se guardaron ' + guardados + ' y falló uno. Los que ya se guardaron se sacaron de la lista: volvé a tocar Guardar para el resto.')); return; }
+        guardados += 1; filas.splice(filas.indexOf(x.f), 1); x.f.nodo.remove(); calc();
+      }
+      terminar(m, { mensaje: guardados === 1 ? 'Se cargó 1 producto.' : 'Se cargaron ' + guardados + ' productos.' });
     }, 'Guardando…'));
   }
 
