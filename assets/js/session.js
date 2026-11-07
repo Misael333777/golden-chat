@@ -1,4 +1,5 @@
-// Sesión local. El token vive SOLO en sessionStorage (se borra al cerrar la pestaña). Nunca en localStorage, URL, DOM ni consola.
+// Sesión local. 07/11 (pedido del usuario): el token se guarda en localStorage para que la sesión quede abierta
+// aunque cierren la pestaña o la app, hasta que toquen Salir (o venza en el servidor). Nunca en URL, DOM ni consola.
 // Persona, roles y paneles quedan en memoria y se reconstruyen con tipo:"sesion" al abrir la página.
 // persona_id NO se envía nunca: la identidad la decide la Web API a partir del token.
 const K_TOKEN = 'golden_token';
@@ -9,9 +10,9 @@ let timerExpira = null;
 let alExpirar = null;
 
 const ss = {
-  get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
-  set(k, v) { try { sessionStorage.setItem(k, v); } catch (e) { /* sin almacenamiento: la sesión vive solo en memoria */ } },
-  del(k) { try { sessionStorage.removeItem(k); } catch (e) { /* nada */ } },
+  get(k) { try { return localStorage.getItem(k) || sessionStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento: la sesión vive solo en memoria */ } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* nada */ } try { sessionStorage.removeItem(k); } catch (e) { /* nada */ } },
 };
 
 export function tokenGuardado() { return estado.token || ss.get(K_TOKEN); }
@@ -51,5 +52,7 @@ function programarExpiracion() {
   if (!Number.isFinite(t)) return;
   const falta = t - Date.now();
   if (falta <= 0) { if (alExpirar) alExpirar(); return; }
-  timerExpira = setTimeout(() => { if (alExpirar) alExpirar(); }, Math.min(falta, 2 ** 31 - 1));
+  // setTimeout no admite más de ~24 días: si falta más, se vuelve a programar en vez de expirar antes de tiempo.
+  const MAXT = 2 ** 31 - 1;
+  timerExpira = setTimeout(() => { if (falta > MAXT) programarExpiracion(); else if (alExpirar) alExpirar(); }, Math.min(falta, MAXT));
 }
