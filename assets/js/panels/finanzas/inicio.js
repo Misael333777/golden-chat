@@ -46,8 +46,11 @@ export function vistaInicio(ctx, cont, mostrar = false) {
     montar(cuerpo,
       el('div', { class: 'prd-tiles', id: 'fin-tiles-cc' },
         tile('Total por cobrar', pesos(d.total_falta_pagar), 'por_cobrar'), tile('Saldo a favor de clientes', pesos(d.total_saldo_a_favor), 'a_favor'),
-        tile('Extras pendientes de registrar', String(d.extras_pendientes ?? 0), 'extras_pendientes'),
         tile('Alertas de conciliación', String((d.inconsistencias || 0) + (d.pagos_no_conciliados || 0) + (d.extras_en_error || 0)), 'alertas')),
+      // 10/11 (pedido del usuario): los extras se cobran solos; solo se avisa si alguno no se pudo cobrar (con botón para revisarlo).
+      (d.extras_pendientes || 0) + (d.extras_en_error || 0) > 0 ? el('div', { class: 'notice pending stack', id: 'fin-aviso-extras' },
+        el('p', { text: 'Hay ' + ((d.extras_pendientes || 0) + (d.extras_en_error || 0)) + ' extra(s) que no se pudieron cobrar solos.' }),
+        el('a', { class: 'btn btn-ghost btn-sm', href: '#/finanzas/extras' }, 'Revisar extras')) : null,
       el('p', { class: 'muted small', text: 'Cuenta corriente calculada: ' + fmtFecha(d.generado_al) }));
   });
 }

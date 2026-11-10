@@ -40,7 +40,8 @@ const PRESENTACION = {
 export function vistaFinanzas(ctx, partes) {
   const sec = partes[0] || 'inicio';
   if (!MENU.some(m => m.id === sec)) return ctx.ir('#/finanzas/inicio');
-  const nav = MENU.map(m => Object.assign({}, m, PRESENTACION[m.id]));
+  // 10/11 (pedido del usuario): 'Extras' sale del menú (desde el 05/11 se cobran solos). Se entra desde el aviso de Inicio cuando alguno no se pudo cobrar.
+  const nav = MENU.filter(m => m.id !== 'extras' || sec === 'extras').map(m => Object.assign({}, m, PRESENTACION[m.id]));
   const avisos = el('div', { class: 'stack', id: 'fin-pendientes-ops' });
   const zonaApp = el('div', { class: 'stack', id: 'fin-instalar' }); // 17/10: instalar como app (solo en Inicio)
   if (sec === 'inicio') { const t = tarjetaInstalar(); if (t) zonaApp.appendChild(t); zonaApp.appendChild(tarjetaNotificaciones(ctx, 'admin_finanzas')); }
