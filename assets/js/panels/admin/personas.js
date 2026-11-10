@@ -296,7 +296,100 @@ export function vistaFicha(ctx, cont, s, pid) {
     const rolesCard = el('div', { class: 'card stack', id: 'ficha-roles' },
       el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-roles', text: 'Roles y acceso' }), el('span', { class: 'spacer' }), bAgregar),
       filas.length ? el('div', { class: 'role-list' }, filas) : el('p', { class: 'muted', text: 'Sin roles.' }));
-    montar(cuerpo, datos, codigo, rolesCard);
+    // 10/11 (pedido del usuario): precios especiales del cliente (se cargan solo al tocar el botón: 1 consulta).
+    const esCli = roles.some(r => r.rol === 'cliente' && r.estado === 'activo');
+    const precios = esCli ? el('div', { class: 'card stack', id: 'ficha-precios' },
+      el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-precio', text: 'Precios especiales' }), el('span', { class: 'spacer' }),
+        el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-op': 'precios', id: 'btn-precios', onclick: () => { montar(avisos); abrirPrecios(p); } }, 'Ver y editar')),
+      el('p', { class: 'muted small', text: 'Precio distinto al de su lista para algún producto (por ejemplo, pan francés a $1.350). Vale para pedidos y extras desde que se guarda.' })) : null;
+    montar(cuerpo, datos, codigo, rolesCard, precios);
+  }
+
+  // 10/11 (pedido del usuario): ver, agregar, cambiar y quitar precios especiales del cliente. El backend valida, audita y verifica.
+  function abrirPrecios(p) {
+    const zona = el('div', { class: 'stack', id: 'precios-aviso' });
+    const lista = el('div', { class: 'stack', id: 'precios-lista', 'data-estado': 'cargando' }, el('div', { class: 'skeleton' }));
+    const formZona = el('div', { class: 'stack', id: 'precios-form' });
+    modal('Precios especiales — ' + (str(p.nombre) || ''), el('div', { class: 'stack' }, lista, formZona, zona));
+    const $ = (v) => (typeof v === 'number' && Number.isFinite(v) ? '$' + new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(v) : '—');
+    const modoTxt = (x) => (x.modo === 'precio' ? 'Precio fijo ' + $(x.precio_aplicado) : x.modo === 'minorista' ? 'Lista minorista (' + $(x.precio_aplicado) + ')' : x.modo === 'mayorista' ? 'Lista mayorista (' + $(x.precio_aplicado) + ')' : '—');
+    let productos = [];
+    let listaCli = null;
+    function pintarLista(esp) {
+      lista.dataset.estado = 'listo';
+      montar(lista,
+        el('p', { class: 'small muted', text: 'Lista del cliente: ' + textoLista(listaCli) + '. Lo que no figura acá se cobra a esa lista.' }),
+        esp.length ? el('div', { class: 'tabla rep-tabla', id: 'precios-tabla' },
+          el('div', { class: 'rep-fila rep-head rep-c4' }, ['Producto', 'Su lista', 'Precio especial', ''].map(c => el('span', { text: c }))),
+          esp.map(x => {
+            const bQ = el('button', { type: 'button', class: 'btn btn-danger btn-sm', 'data-quitar': String(x.producto_id) }, 'Quitar');
+            bQ.addEventListener('click', conBloqueo(bQ, async () => {
+              if (!(await confirmar('Quitar precio especial', '¿Quitás el precio especial de ' + x.producto + '? Desde ahora se cobra a su lista (' + $(x.precio_lista) + ').', 'Quitar'))) return;
+              await guardar({ persona_id: p.persona_id, producto_id: x.producto_id, modo: 'quitar' });
+            }, 'Quitando…'));
+            const celda = (lbl, ...hijos) => el('span', { 'data-col': lbl }, lbl ? el('span', { class: 'pc-label', text: lbl + ': ' }) : null, ...hijos);
+            return el('div', { class: 'rep-fila rep-c4', dataset: { producto: String(x.producto_id) } }, celda('Producto', x.producto + (x.unidad ? ' (' + x.unidad + ')' : '')), celda('Su lista', $(x.precio_lista)),
+              celda('Precio especial', el('b', { text: modoTxt(x) }), x.nota ? el('span', { class: 'small muted', text: ' · ' + x.nota }) : null), celda('', bQ));
+          })) : el('p', { class: 'muted', id: 'precios-vacio', text: 'No tiene precios especiales: todo se cobra a su lista.' }));
+    }
+    function pintarForm() {
+      const sel = el('select', { class: 'select', id: 'precio-producto' }, el('option', { value: '', text: 'Elegí un producto' }),
+        productos.map(x => el('option', { value: String(x.producto_id), text: x.producto + (x.unidad ? ' (' + x.unidad + ')' : '') })));
+      const modo = el('select', { class: 'select', id: 'precio-modo' }, el('option', { value: 'precio', text: 'Precio fijo' }),
+        el('option', { value: 'minorista', text: 'A precio minorista' }), el('option', { value: 'mayorista', text: 'A precio mayorista' }));
+      const iPrecio = el('input', { class: 'input', id: 'precio-valor', inputmode: 'decimal', maxlength: '12', placeholder: 'Ej: 1350' });
+      const iNota = el('input', { class: 'input', id: 'precio-nota', maxlength: '200', placeholder: 'Opcional' });
+      const ayuda = el('span', { class: 'hint', id: 'precio-ayuda' });
+      const campoPrecio = el('div', { class: 'field' }, el('label', { for: 'precio-valor', text: 'Precio por unidad' }), iPrecio);
+      const sync = () => {
+        campoPrecio.hidden = modo.value !== 'precio';
+        const x = productos.find(q => String(q.producto_id) === sel.value);
+        ayuda.textContent = x ? 'Minorista ' + $(x.precio_minorista) + ' · Mayorista ' + $(x.precio_mayorista) : '';
+      };
+      sel.addEventListener('change', sync); modo.addEventListener('change', sync); sync();
+      const boton = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-precio' }, 'Guardar precio especial');
+      const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
+        el('h4', { text: 'Agregar o cambiar' }),
+        el('div', { class: 'form-grid' },
+          el('div', { class: 'field' }, el('label', { for: 'precio-producto', text: 'Producto' }), sel, ayuda),
+          el('div', { class: 'field' }, el('label', { for: 'precio-modo', text: 'Cómo se cobra' }), modo), campoPrecio,
+          el('div', { class: 'field' }, el('label', { for: 'precio-nota', text: 'Nota' }), iNota)),
+        boton);
+      form.addEventListener('submit', conBloqueo(boton, async () => {
+        montar(zona);
+        const pid2 = parseInt(sel.value, 10);
+        if (!pid2) return montar(zona, aviso('error', 'Elegí un producto.'));
+        const campos = { persona_id: p.persona_id, producto_id: pid2, modo: modo.value };
+        if (modo.value === 'precio') {
+          // '1.350' o '1350' o '1350,50' (punto de miles, coma decimal)
+          const v = Number(iPrecio.value.trim().replace(/\$/g, '').replace(/\./g, '').replace(',', '.'));
+          if (!Number.isFinite(v) || v <= 0) return montar(zona, aviso('error', 'Poné un precio válido, por ejemplo 1350.'));
+          campos.precio = Math.round(v * 100) / 100;
+        }
+        if (iNota.value.trim()) campos.nota = iNota.value.trim();
+        await guardar(campos);
+      }, 'Guardando…'));
+      montar(formZona, form);
+    }
+    async function guardar(campos) {
+      const res = await ops.ejecutar(ctx.base(TIPO), 'precio_especial_guardar', campos);
+      if (res.sinConfirmar) return montar(zona, avisoSinConfirmar(res.falla, res.operacion_id, () => guardar(campos), () => { ops.descartar('precio_especial_guardar', campos); montar(zona); }));
+      if (ctx.revisarFinSesion(res.r)) return;
+      montar(zona, avisoBackend(res.r));
+      if (res.r.success && res.r.datos && Array.isArray(res.r.datos.especiales)) { pintarLista(res.r.datos.especiales); pintarForm(); }
+    }
+    (async () => {
+      const res = await ctx.pedir(TIPO, 'precios_especiales_ver', { persona_id: p.persona_id });
+      if (!lista.isConnected) return;
+      if (res.falla) { lista.dataset.estado = 'listo'; return montar(lista, avisoFalla(res.falla)); }
+      if (ctx.revisarFinSesion(res.r)) return;
+      const r = res.r;
+      if (!r.success || !r.datos) { lista.dataset.estado = 'listo'; return montar(lista, avisoBackend(r)); }
+      productos = Array.isArray(r.datos.productos) ? r.datos.productos : [];
+      listaCli = r.datos.lista_precio || null;
+      pintarLista(Array.isArray(r.datos.especiales) ? r.datos.especiales : []);
+      pintarForm();
+    })();
   }
 
   function filaRol(p, r) {
