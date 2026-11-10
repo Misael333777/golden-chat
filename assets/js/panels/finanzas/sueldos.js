@@ -75,7 +75,7 @@ export function vistaSueldos(ctx, cont) {
     const resumenTraslado = a.cargada && e.traslado ? ' · traslado pan ' + fnum(a.dias.traslado || 0) + ' días' : '';
     const b = (txt, cls, fn, id) => { const x = el('button', { type: 'button', class: 'btn btn-sm ' + cls, 'data-emp': e.empleado_id, id }, txt); x.addEventListener('click', fn); return x; };
     const pagar = liq && /^DEU-[0-9A-F]{16}$/.test(liq.deuda_id || '') ? el('a', { class: 'btn btn-sm btn-gold', href: '#/finanzas/pagar/deuda/' + liq.deuda_id, 'data-emp': e.empleado_id }, 'Pagar') : null;
-    const acciones = liq ? [pagar, b('Imprimir', 'btn-ghost', () => imprimir(e, datos.periodo))]
+    const acciones = liq ? [pagar, b('Imprimir', 'btn-ghost', () => imprimir(e, datos.periodo)), b('Rehacer liquidación', 'btn-ghost', () => abrirRehacer(e), 'sl-rehacer-' + e.empleado_id)]
       : [b('Cargar días', 'btn-primary', () => abrirDias(e), 'sl-dias-' + e.empleado_id), b('Se llevó', 'btn-ghost', () => abrirMercaderia(e)), b('Adelanto', 'btn-ghost', () => abrirAdelanto(e)), b('Descuento', 'btn-ghost', () => abrirDescuento(e), 'sl-desc-' + e.empleado_id),
         b('Liquidar', 'btn-gold', () => abrirLiquidar(e), 'sl-liq-' + e.empleado_id)];
     const filaNov = (txt, imp, id) => el('div', { class: 'row small' }, el('span', { text: txt }), el('span', { class: 'spacer' }), el('span', { text: '− ' + pesos(imp) }),
@@ -263,6 +263,23 @@ export function vistaSueldos(ctx, cont) {
       if (!(await confirmar('Confirmar descuento', 'Descontar ' + pesos(imp) + ' del sueldo de ' + nombreMes(datos.periodo) + ' de ' + e.nombre + '. ¿Confirmás?', 'Descontar'))) return;
       await enviar('sueldos_descuento', { empleado_id: e.empleado_id, periodo: datos.periodo, fecha: iFecha.value, importe: imp, nota: iMot.value.trim() }, zona, (r) => terminar(m, r));
     }, 'Registrando…'));
+  }
+
+  // 10/11: rehacer liquidación. Solo si el sueldo todavía no tiene pagos (lo controla el servidor).
+  function abrirRehacer(e) {
+    const iMot = el('input', { class: 'input', id: 'sl-r-motivo', maxlength: '200', placeholder: 'Ej.: estaba mal el precio de un producto' });
+    const zona = el('div', { class: 'stack' });
+    const bOk = el('button', { type: 'button', class: 'btn btn-primary', id: 'sl-r-ok' }, 'Rehacer liquidación');
+    const m = modal('Rehacer liquidación — ' + e.nombre, el('div', { class: 'stack' },
+      el('p', { class: 'muted small', text: 'Se deshace la liquidación de ' + nombreMes(datos.periodo) + ' para poder corregir y volver a liquidar. Solo se puede si el sueldo todavía no se pagó. Los adelantos se mantienen.' }),
+      el('div', { class: 'field' }, el('label', { for: 'sl-r-motivo', text: 'Motivo' }), iMot),
+      bOk, zona));
+    bOk.addEventListener('click', conBloqueo(bOk, async () => {
+      montar(zona);
+      if (iMot.value.trim().length < 3) return montar(zona, aviso('error', 'Escribí el motivo.'));
+      if (!(await confirmar('Rehacer liquidación', 'Se deshace la liquidación de ' + nombreMes(datos.periodo) + ' de ' + e.nombre + '. Después corregí lo que haga falta y tocá Liquidar de nuevo. ¿Confirmás?', 'Rehacer'))) return;
+      await enviar('sueldos_desliquidar', { empleado_id: e.empleado_id, periodo: datos.periodo, motivo: iMot.value.trim() }, zona, (r) => terminar(m, r));
+    }, 'Procesando…'));
   }
 
   async function anular(novedadId, txt) {

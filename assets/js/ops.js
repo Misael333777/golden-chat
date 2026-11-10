@@ -25,7 +25,7 @@ const ACCIONES = ['crear_persona', 'editar_persona', 'agregar_rol', 'quitar_rol'
   // Etapa 4: habitual multiproducto por día, 'Hoy no pedir' y 'Volver al habitual' / 'Cancelar pedido' (cliente: anular; Admin General: anular_pedido_fecha).
   'editar_habitual_dia', 'hoy_no_pedir', 'anular', 'anular_pedido_fecha',
   // 24/10: devoluciones (Admin General).
-  'registrar_devolucion', 'cambiar_lista_precio', 'sueldos_asistencia', 'sueldos_mercaderia', 'sueldos_adelanto', 'sueldos_descuento', 'sueldos_anular', 'sueldos_liquidar',
+  'registrar_devolucion', 'cambiar_lista_precio', 'sueldos_asistencia', 'sueldos_mercaderia', 'sueldos_adelanto', 'sueldos_descuento', 'sueldos_anular', 'sueldos_liquidar', 'sueldos_desliquidar',
   // 01/11: panel Producción (tipo produccion): extra ya entregado y devolución descontada de la cuenta.
   'prod_registrar_extra', 'prod_registrar_devolucion'].concat(ACCIONES_FINANZAS);
 // Tipo de la Web API con el que se envió cada operación (se guarda para reintentarla en el MISMO panel). Las entradas viejas sin tipo
