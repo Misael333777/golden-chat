@@ -7,7 +7,7 @@ import { avisoFalla } from '../admin/personas.js';
 
 const LOGO = 'assets/img/logo.png';
 const MAX_DIAS = 31;
-const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const ENT = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const plata = (v) => (typeof v === 'number' && Number.isFinite(v) ? '$' + ENT.format(Math.abs(v)) : 'A confirmar');
 const dm = (f) => f.slice(8, 10) + '/' + f.slice(5, 7);
@@ -19,34 +19,37 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 const sumarDias = (f, n) => new Date(Date.parse(f + 'T12:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
 // 29/10: extras, devoluciones y ajustes del dia (items) con su importe; los extras sin confirmar se avisan solo en pantalla.
 const items = (x) => (Array.isArray(x.items) ? x.items : []);
-const itemTxt = (i) => (i.importe > 0 ? '+ ' : i.importe < 0 ? '− ' : '') + (i.importe ? plata(i.importe) : 'sin cargo');
-const itemCls = (i) => (i.importe > 0 ? 'mas' : i.importe < 0 ? 'menos' : '');
 // 10/11 (pedido del usuario): cada linea muestra 'cantidad × precio' y su subtotal; extras y devoluciones igual, en su dia.
 // El precio se muestra solo si cierra la cuenta (cantidad × precio = subtotal); si no, solo cantidad y subtotal.
 const precioOk = (l) => typeof l.precio === 'number' && typeof l.importe === 'number' && typeof l.cantidad === 'number' && Math.abs(Math.abs(l.cantidad * l.precio) - Math.abs(l.importe)) < 0.01;
-const cuenta = (l) => { const q = cant(l); return (q ? ' · ' + q : '') + (precioOk(l) ? ' × ' + plata(l.precio) : ''); };
+const cuenta = (l) => cant(l) + (precioOk(l) ? ' × ' + plata(l.precio) : '');
 const linsDe = (i) => (Array.isArray(i.lineas) ? i.lineas : []);
-const PREF = { extra: 'Extra: ', devolucion: 'Devolución: ' };
-// Filas de un dia: [texto, importe, clase, esItem]. Una sola fuente para pantalla, impresion e imagen.
+// 10/11 (diseño nuevo, pedido del usuario): etiquetas de color para lo que suma o resta en el día.
+const ETQ = { extra: ['EXTRA', 'ext'], devolucion: ['DEVOLUCIÓN', 'dev'], compra: ['COMPRA', 'dev'], pedido_manual: ['AGREGADO', 'ext'], ajuste: ['AJUSTE', 'aj'], repuesto: ['REPUESTO', 'aj'] };
+const tipoItem = (i) => (/^Compra\b/.test(i.detalle || '') ? 'compra' : i.tipo);
+const sinPref = (t) => String(t || '').replace(/^(Extra|Devolución|Compra|Repuesto sin cargo): ?/, '');
+const valTxt = (v) => (v > 0 ? '+ ' : v < 0 ? '− ' : '') + (v ? plata(v) : 'sin cargo');
+const valCls = (v) => (v > 0 ? 'mas' : v < 0 ? 'menos' : '');
+// Filas de un dia: { tag, tagCls, nom, sub, val, cls }. Una sola fuente para pantalla, impresion e imagen.
 function filasDia(x) {
   const esp = x.cuenta_especial;
+  const out = [];
   // 10/11 (pedido del usuario): con cuenta especial (Hugo) el pan francés se muestra como su cuenta real, no a precio de lista.
-  const out = x.lineas.filter(l => !(esp && l.en_cuenta)).map(l => (typeof l.importe === 'number' ? [l.detalle + cuenta(l), plata(l.importe), '', false] : [l.detalle, cant(l), '', false]));
   if (esp) {
-    const kg = (v) => ENT.format(v) + ' kg', neto = Math.round((esp.kg_frances - esp.kg_descuento) * 100) / 100, val = (esp.importe < 0 ? '− ' : '') + plata(esp.importe);
-    if (esp.kg_descuento > 0) {
-      out.unshift(['Pan francés · ' + kg(esp.kg_frances), '', '', false], ['Menos caserito y galleta · ' + kg(esp.kg_descuento), '', '', false],
-        [(neto < 0 ? 'Quedan a favor ' + kg(-neto) : 'Quedan ' + kg(neto)) + ' × ' + plata(esp.precio_kg), val, esp.importe < 0 ? 'menos' : '', false]);
-    } else out.unshift(['Pan francés · ' + kg(esp.kg_frances) + ' × ' + plata(esp.precio_kg), val, '', false]);
+    const kg = (v) => ENT.format(v) + ' kg', neto = Math.round((esp.kg_frances - esp.kg_descuento) * 100) / 100;
+    out.push({ nom: 'Pan francés', sub: esp.kg_descuento > 0 ? kg(esp.kg_frances) + ' − ' + kg(esp.kg_descuento) + ' caserito y galleta = ' + kg(neto) + ' × ' + plata(esp.precio_kg) : kg(esp.kg_frances) + ' × ' + plata(esp.precio_kg),
+      val: (esp.importe < 0 ? '− ' : '') + plata(esp.importe), cls: esp.importe < 0 ? 'menos' : '' });
   }
-  if (typeof x.ajuste === 'number' && Math.abs(x.ajuste) >= 0.01) out.push(['Diferencia de precio del día', (x.ajuste > 0 ? '+ ' : '− ') + plata(x.ajuste), x.ajuste > 0 ? 'mas' : 'menos', true]);
+  x.lineas.filter(l => !(esp && l.en_cuenta)).forEach(l => out.push({ nom: l.detalle, sub: typeof l.importe === 'number' ? cuenta(l) : cant(l), val: typeof l.importe === 'number' ? plata(l.importe) : '', cls: '' }));
+  if (typeof x.ajuste === 'number' && Math.abs(x.ajuste) >= 0.01) out.push({ tag: 'AJUSTE', tagCls: 'aj', nom: 'Diferencia de precio', sub: '', val: valTxt(x.ajuste), cls: valCls(x.ajuste) });
   for (const i of items(x)) {
-    const ls = linsDe(i), pref = PREF[i.tipo];
-    const cierra = pref && ls.length && ls.every(l => typeof l.importe === 'number') && Math.abs(ls.reduce((a, l) => a + Math.abs(l.importe), 0) - Math.abs(i.importe || 0)) < 0.01 && i.importe;
-    if (cierra) ls.forEach(l => out.push([pref + l.detalle + cuenta(l), (i.importe < 0 ? '− ' : '+ ') + plata(l.importe), itemCls(i), true]));
-    else out.push([i.detalle, itemTxt(i), itemCls(i), true]);
+    const [tag, tagCls] = ETQ[tipoItem(i)] || ETQ.ajuste;
+    const ls = linsDe(i);
+    const cierra = (i.tipo === 'extra' || i.tipo === 'devolucion') && ls.length && ls.every(l => typeof l.importe === 'number') && Math.abs(ls.reduce((a, l) => a + Math.abs(l.importe), 0) - Math.abs(i.importe || 0)) < 0.01 && i.importe;
+    if (cierra) ls.forEach(l => { const v = Math.abs(l.importe) * Math.sign(i.importe); out.push({ tag, tagCls, nom: l.detalle, sub: cuenta(l), val: valTxt(v), cls: valCls(v) }); });
+    else out.push({ tag, tagCls, nom: sinPref(i.detalle), sub: '', val: valTxt(i.importe), cls: valCls(i.importe) });
   }
-  if (!out.length) out.push(['Pedido del día', '', '', false]);
+  if (!out.length) out.push({ nom: 'Pedido del día', sub: '', val: '', cls: '' });
   return out;
 }
 const diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 86400e3) + 1;
@@ -57,9 +60,9 @@ const diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.pars
 const movsDe = (d) => (Array.isArray(d.movimientos_periodo) ? d.movimientos_periodo : []);
 function resumen(d) {
   const previo = Math.round(((d.saldo_anterior || 0) + (d.pagos_periodo || 0) + (d.ajustes_periodo || 0)) * 100) / 100;
-  const filas = [['Pedidos del período', plata(d.total_pedidos), '']];
+  const filas = [[d.fecha_desde === d.fecha_hasta ? 'Pedidos del día' : 'Pedidos del período', plata(d.total_pedidos), '']];
   if (previo < 0) filas.push(['A favor de antes', '− ' + plata(previo), 'favor']);
-  else filas.push(['Deuda anterior', previo === 0 && movsDe(d).length ? 'Pagada' : (previo > 0 ? '+ ' : '') + plata(previo), previo > 0 ? 'deuda' : '']);
+  else filas.push(['Deuda anterior', previo === 0 && movsDe(d).length ? 'Pagada ✓' : (previo > 0 ? '+ ' : '') + plata(previo), previo > 0 ? 'deuda' : previo === 0 && movsDe(d).length ? 'favor' : '']);
   const t = d.total_a_pagar;
   const final = t < 0 ? { txt: 'Le queda a favor', val: plata(t), cls: 'favorfin' } : { txt: 'Total a pagar', val: plata(t), cls: 'pagar' };
   // 05/11 (pedido del usuario): debajo, el detalle de lo que incluye la deuda anterior (lo de antes + pagos y ajustes del período).
@@ -82,18 +85,18 @@ const periodoTxt = (d) => (d.fecha_desde === d.fecha_hasta ? dmy(d.fecha_desde) 
 // Los estilos de la boleta estan en assets/css/boleta.css (la CSP de la pagina bloquea estilos inline).
 const CSS_URL = 'assets/css/boleta.css';
 
+// 10/11 (diseño nuevo, pedido del usuario): cabecera oscura, total grande arriba, días en tarjetas y etiquetas de color. Sin resumen por producto.
 export function htmlBoleta(d, logoSrc) {
   const r = resumen(d);
-  const filasDias = d.dias.map(x => '<tr><td class="f">' + esc(diaTxt(x.fecha)) + '</td><td>' +
-    filasDia(x).map(([a, b, c, it]) => '<div class="gb-it' + (it ? ' gb-x ' + c : '') + '"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') +
-    '</td><td class="n">' + esc(plata(x.importe)) + '</td></tr>').join('');
+  const fila = (f) => '<div class="gb-ln"><div>' + (f.tag ? '<span class="gb-tag ' + f.tagCls + '">' + esc(f.tag) + '</span>' : '') + '<b>' + esc(f.nom) + '</b>' + (f.sub ? '<small>' + esc(f.sub) + '</small>' : '') + '</div><span class="' + f.cls + '">' + esc(f.val) + '</span></div>';
+  const dias = d.dias.map(x => '<section class="gb-dia"><header><span>' + esc(diaTxt(x.fecha)) + '</span><b>' + esc(plata(x.importe)) + '</b></header>' + filasDia(x).map(fila).join('') + '</section>').join('');
   return '<div class="gb">' +
-    '<div class="gb-head"><img src="' + esc(logoSrc || LOGO) + '" alt="Golden"><div class="gb-hd"><div class="gb-t">Boleta de pedidos</div><div class="gb-m">Emitida ' + esc(dmy(hoyART())) + '</div></div></div>' +
-    '<div class="gb-datos"><div><span>Cliente</span><b>' + esc(d.persona.nombre) + '</b></div><div><span>' + (d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período') + '</span><b>' + esc(periodoTxt(d)) + '</b></div></div>' +
-    '<table><thead><tr><th>Fecha</th><th>Detalle</th><th class="n">Total del día</th></tr></thead><tbody>' + filasDias + '</tbody></table>' +
-    '<div class="gb-tot">' + r.filas.map(([a, b, c]) => '<div class="gb-r ' + c + '"><span>' + esc(a) + '</span><b>' + esc(b) + '</b></div>').join('') +
-    '<div class="gb-r gb-final ' + r.final.cls + '"><span>' + esc(r.final.txt) + '</span><b>' + esc(r.final.val) + '</b></div></div>' +
-    (r.detalle.length ? '<div class="gb-det"><div class="gb-det-t">' + esc(r.tituloDet) + '</div>' + r.detalle.map(([a, b], i) => '<div class="gb-it' + (i === r.detalle.length - 1 ? ' gb-q' : '') + '"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') + '</div>' : '') +
+    '<div class="gb-top"><img src="' + esc(logoSrc || LOGO) + '" alt="Golden"><div class="gb-hd"><div class="gb-t">Boleta de pedidos</div><div class="gb-m">Emitida ' + esc(dmy(hoyART())) + '</div></div></div>' +
+    '<div class="gb-datos"><div><span>Cliente</span><b>' + esc(d.persona.nombre) + '</b></div><div class="der"><span>' + (d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período') + '</span><b>' + esc(periodoTxt(d)) + '</b></div></div>' +
+    '<div class="gb-hero ' + r.final.cls + '"><span>' + esc(r.final.txt) + '</span><b>' + esc(r.final.val) + '</b></div>' +
+    '<div class="gb-mini">' + r.filas.map(([a, b, c]) => '<div><span>' + esc(a) + '</span><b class="' + c + '">' + esc(b) + '</b></div>').join('') + '</div>' +
+    (r.detalle.length ? '<div class="gb-det"><div class="gb-det-t">' + esc(r.tituloDet) + '</div>' + r.detalle.map(([a, b], i) => '<div class="gb-dl' + (i === r.detalle.length - 1 ? ' gb-q' : '') + '"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') + '</div>' : '') +
+    (d.dias.length ? '<h3 class="gb-h3">DÍA POR DÍA</h3>' + dias + '<p class="gb-ley"><span class="mas">+</span> suma a su cuenta · <span class="menos">−</span> se descuenta</p>' : '') +
     r.notas.map(t => '<p class="gb-nota">' + esc(t) + '</p>').join('') +
     '<p class="gb-leg">Comprobante interno · No válido como factura</p></div>';
 }
@@ -162,70 +165,83 @@ function imprimir(d) {
   Promise.race([Promise.all(esperas), new Promise(ok => setTimeout(ok, 3000))]).then(() => setTimeout(lanzar, 100));
 }
 
-// Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp.
+// Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp. 10/11: mismo diseño que la pantalla.
 async function imagenBoleta(d) {
   const r = resumen(d);
-  const S = 2, W = 560, P = 22;
+  const S = 2, W = 520, P = 22, IN = 12;
   const logo = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = LOGO; });
   try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (err) { /* sin fuentes: usa las del sistema */ }
   const F = (peso, tam, serif) => peso + ' ' + tam + 'px ' + (serif ? 'Fraunces, Georgia, serif' : 'Manrope, system-ui, sans-serif');
-  // Alto: cabecera + datos + encabezado tabla + filas + totales + notas
-  const altoDia = (x) => filasDia(x).length * 18 + 14;
-  const H = 70 + 60 + 26 + d.dias.reduce((a, x) => a + altoDia(x), 0) + 16 + r.filas.length * 26 + 52 + r.notas.length * 34 + (r.detalle.length ? (r.detalle.length + 1) * 18 + 12 : 0) + 46;
+  const filas = d.dias.map(filasDia);
+  const altoFila = (f) => (f.sub ? 42 : 28);
+  const H = 400 + filas.reduce((a, fs) => a + 46 + fs.reduce((b, f) => b + altoFila(f), 0), 0) + (r.detalle.length + 1) * 18 + r.notas.length * 40 + 140;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext('2d'); g.scale(S, S);
-  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
-  let y = P;
-  if (logo) g.drawImage(logo, P, y, 96, 96 * logo.height / logo.width);
-  g.textAlign = 'right'; g.fillStyle = '#241F16'; g.font = F('600', 17, true); g.fillText('Boleta de pedidos', W - P, y + 20);
-  g.fillStyle = '#6B6350'; g.font = F('400', 11); g.fillText('Emitida ' + dmy(hoyART()), W - P, y + 36);
-  y += 62; g.fillStyle = '#C9994A'; g.fillRect(P, y, W - 2 * P, 2);
-  y += 22; g.textAlign = 'left'; g.fillStyle = '#6B6350'; g.font = F('400', 11);
-  g.fillText('Cliente', P, y); g.fillText(d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período', W / 2, y);
-  y += 18; g.fillStyle = '#241F16'; g.font = F('800', 14);
+  const caja = (x, y, w, h, rad, fill, stroke, lw) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, rad); else g.rect(x, y, w, h); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw || 1; g.stroke(); } };
   const recorta = (t, max) => { let s = String(t); while (s.length > 1 && g.measureText(s).width > max) s = s.slice(0, -2) + '…'; return s; };
-  g.fillText(recorta(d.persona.nombre, W / 2 - P - 8), P, y); g.fillText(periodoTxt(d), W / 2, y);
-  y += 26; g.fillStyle = '#6B6350'; g.font = F('600', 11); g.fillText('Fecha', P, y); g.fillText('Detalle', P + 82, y); g.textAlign = 'right'; g.fillText('Total del día', W - P, y);
-  y += 7; g.fillStyle = '#C9B37C'; g.fillRect(P, y, W - 2 * P, 1);
-  for (const x of d.dias) {
-    let yy = y + 18;
-    g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('600', 13); g.fillText(diaTxt(x.fecha), P, yy);
-    g.textAlign = 'right'; g.font = F('400', 13); g.fillText(plata(x.importe), W - P, yy);
-    for (const [a, b, c, it] of filasDia(x)) {
-      g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F(it ? 'italic 400' : '400', it ? 12 : 13); g.fillText(recorta(a, W - P - 92 - (P + 82) - 84), P + 82, yy);
-      g.textAlign = 'right'; g.fillStyle = c === 'mas' ? '#A63D2F' : c === 'menos' ? '#3F7D57' : '#6B6350'; g.fillText(b, W - P - 92, yy); g.font = F('400', 13); yy += 18;
-    }
-    y += altoDia(x);
-    g.fillStyle = '#E2D6B8'; for (let i = P; i < W - P; i += 6) g.fillRect(i, y, 3, 1);
-  }
-  y += 10;
-  for (const [a, b, c] of r.filas) {
-    y += 22; g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('400', 14); g.fillText(recorta(a, W - 2 * P - 120), P, y);
-    g.textAlign = 'right'; g.fillStyle = c === 'deuda' ? '#A63D2F' : c === 'favor' ? '#3F7D57' : '#241F16'; g.font = F('800', 14); g.fillText(b, W - P, y); y += 4;
-  }
-  y += 12;
-  const fav = r.final.cls === 'favorfin';
-  g.fillStyle = fav ? 'rgba(63,125,87,0.10)' : '#FBF3E3'; g.strokeStyle = fav ? '#3F7D57' : '#C9994A'; g.lineWidth = 1.5;
-  if (g.roundRect) { g.beginPath(); g.roundRect(P, y, W - 2 * P, 44, 10); g.fill(); g.stroke(); } else { g.fillRect(P, y, W - 2 * P, 44); g.strokeRect(P, y, W - 2 * P, 44); }
-  g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('400', 16); g.fillText(r.final.txt, P + 12, y + 28);
-  g.textAlign = 'right'; g.font = F('800', 20); g.fillText(r.final.val, W - P - 12, y + 29);
-  y += 52;
+  const txt = (t, x, y, font, color, align, max) => { g.font = font; g.fillStyle = color; g.textAlign = align || 'left'; g.fillText(max ? recorta(t, max) : t, x, y); };
+  const COL = { mas: '#A63D2F', menos: '#2F6B46', '': '#241F16', deuda: '#A63D2F', favor: '#2F6B46' };
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  // Cabecera
+  const gr = g.createLinearGradient(0, 0, W, 90); gr.addColorStop(0, '#2B2418'); gr.addColorStop(1, '#4A3B22');
+  g.fillStyle = gr; g.fillRect(0, 0, W, 90);
+  caja(P, 16, 104, 58, 10, '#fff');
+  if (logo) { const lw = 88, lh = lw * logo.height / logo.width; g.drawImage(logo, P + 8, 16 + (58 - lh) / 2, lw, lh); }
+  txt('Boleta de pedidos', W - P, 42, F('600', 19, true), '#F1D79C', 'right');
+  txt('Emitida ' + dmy(hoyART()), W - P, 62, F('400', 12), '#D9CBA8', 'right');
+  // Cliente y período
+  let y = 112;
+  txt('Cliente', P, y, F('400', 11), '#8A7F66'); txt(d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período', W - P, y, F('400', 11), '#8A7F66', 'right');
+  y += 19; txt(d.persona.nombre, P, y, F('800', 15), '#241F16', 'left', W / 2 - P); txt(periodoTxt(d), W - P, y, F('800', 15), '#241F16', 'right');
+  y += 14; g.fillStyle = '#EFE6D0'; g.fillRect(0, y, W, 1);
+  // Total grande
+  y += 16; const fav = r.final.cls === 'favorfin';
+  caja(P, y, W - 2 * P, 62, 14, fav ? '#E6F2EA' : '#FBF1DC', fav ? '#3F7D57' : '#C9994A', 2);
+  txt(r.final.txt, P + 18, y + 38, F('400', 16), '#241F16'); txt(r.final.val, W - P - 18, y + 41, F('800', 27), '#241F16', 'right');
+  // Cajitas
+  y += 74; const cw = (W - 2 * P - 8) / 2;
+  r.filas.forEach(([a, b, c], i) => { const x = P + i * (cw + 8); caja(x, y, cw, 46, 10, '#FAF7EF'); txt(a, x + 10, y + 18, F('400', 12), '#6B6350', 'left', cw - 20); txt(b, x + 10, y + 36, F('800', 14), COL[c] || '#241F16', 'left', cw - 20); });
+  y += 46;
   if (r.detalle.length) {
-    g.textAlign = 'left'; g.fillStyle = '#6B6350'; g.font = F('600', 12); y += 4; g.fillText(r.tituloDet, P, y);
-    for (const [i, [a, b]] of r.detalle.entries()) {
-      y += 18; g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F(i === r.detalle.length - 1 ? '700' : '400', 12); g.fillText(recorta(a, W - 2 * P - 110), P, y);
-      g.textAlign = 'right'; g.fillText(b, W - P, y);
-    }
-    y += 12;
+    y += 22; txt(r.tituloDet, P, y, F('700', 12), '#6B6350');
+    r.detalle.forEach(([a, b], i) => { y += 18; const ult = i === r.detalle.length - 1; if (ult) { g.fillStyle = '#EFE6D0'; g.fillRect(P, y - 13, W - 2 * P, 1); } txt(a, P, y, F(ult ? '700' : '400', 12), '#241F16', 'left', W - 2 * P - 110); txt(b, W - P, y, F(ult ? '700' : '400', 12), '#241F16', 'right'); });
+  }
+  if (d.dias.length) {
+    y += 30; txt('DÍA POR DÍA', P, y, F('700', 12), '#8A7F66'); y += 10;
+    d.dias.forEach((x, k) => {
+      const fs = filas[k], h = 34 + fs.reduce((a, f) => a + altoFila(f), 0);
+      g.save(); caja(P, y, W - 2 * P, h, 12, '#fff', '#EFE6D0', 1); g.clip();
+      g.fillStyle = '#FBF3E3'; g.fillRect(P, y, W - 2 * P, 34); g.restore();
+      caja(P, y, W - 2 * P, h, 12, null, '#EFE6D0', 1);
+      txt(diaTxt(x.fecha), P + IN, y + 22, F('700', 14), '#241F16'); txt(plata(x.importe), W - P - IN, y + 22, F('800', 14), '#241F16', 'right');
+      let yy = y + 34;
+      fs.forEach((f, i) => {
+        if (i) { g.fillStyle = '#F0E7D2'; for (let z = P + IN; z < W - P - IN; z += 6) g.fillRect(z, yy, 3, 1); }
+        let xx = P + IN;
+        if (f.tag) {
+          g.font = F('800', 9); const tw = g.measureText(f.tag).width + 10;
+          caja(xx, yy + 8, tw, 15, 5, f.tagCls === 'ext' ? '#FBE3DE' : f.tagCls === 'dev' ? '#DDEFE3' : '#EEE9DD');
+          txt(f.tag, xx + 5, yy + 19, F('800', 9), f.tagCls === 'ext' ? '#A63D2F' : f.tagCls === 'dev' ? '#2F6B46' : '#6B6350'); xx += tw + 6;
+        }
+        g.font = F('600', 13); const vw = g.measureText(f.val).width;
+        txt(f.nom, xx, yy + 20, F('700', 13.5), '#241F16', 'left', W - P - IN - vw - 14 - xx);
+        txt(f.val, W - P - IN, yy + 20, F('600', 13.5), COL[f.cls] || '#241F16', 'right');
+        if (f.sub) txt(f.sub, P + IN, yy + 36, F('400', 12), '#8A7F66', 'left', W - 2 * P - 2 * IN);
+        yy += altoFila(f);
+      });
+      y += h + 10;
+    });
+    y += 6; g.textAlign = 'left'; g.font = F('400', 11.5);
+    let xl = P; [['+', '#A63D2F'], [' suma a su cuenta · ', '#8A7F66'], ['−', '#2F6B46'], [' se descuenta', '#8A7F66']].forEach(([t, c]) => { g.fillStyle = c; g.fillText(t, xl, y); xl += g.measureText(t).width; });
   }
   g.textAlign = 'left'; g.fillStyle = '#6B6350'; g.font = F('400', 12);
   for (const t of r.notas) {
-    const pal = t.split(' '); let lin = '';
+    y += 6; const pal = t.split(' '); let lin = '';
     for (const p of pal) { const prueba = lin ? lin + ' ' + p : p; if (g.measureText(prueba).width > W - 2 * P) { y += 16; g.fillText(lin, P, y); lin = p; } else lin = prueba; }
     if (lin) { y += 16; g.fillText(lin, P, y); }
   }
-  y += 22; g.fillStyle = '#EFE6D0'; g.fillRect(P, y - 12, W - 2 * P, 1);
-  g.textAlign = 'center'; g.fillStyle = '#9A917B'; g.font = F('400', 10); g.fillText('Comprobante interno · No válido como factura', W / 2, y + 4);
+  y += 24; g.fillStyle = '#EFE6D0'; g.fillRect(0, y - 12, W, 1);
+  txt('Comprobante interno · No válido como factura', W / 2, y + 6, F('400', 10.5), '#9A917B', 'center');
   const final = document.createElement('canvas'); final.width = W * S; final.height = Math.min(H, y + 20) * S;
   final.getContext('2d').drawImage(cv, 0, 0);
   return new Promise((ok) => final.toBlob((b) => ok(b), 'image/png'));
