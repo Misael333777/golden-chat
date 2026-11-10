@@ -65,7 +65,8 @@ function resumen(d) {
   // 05/11 (pedido del usuario): debajo, el detalle de lo que incluye la deuda anterior (lo de antes + pagos y ajustes del período).
   const movs = movsDe(d);
   const sig = (v) => (v > 0 ? '+ ' : v < 0 ? '− ' : '') + plata(v);
-  const detalle = movs.length ? [['Saldo antes del ' + dm(d.fecha_desde), sig(d.saldo_anterior || 0)]].concat(movs.map(m => [dm(m.fecha) + ' ' + m.detalle, sig(m.importe)])) : [];
+  // 10/11 (pedido del usuario): si la deuda anterior quedó pagada, solo dice 'Pagada' (sin detalle).
+  const detalle = movs.length && previo !== 0 ? [['Saldo antes del ' + dm(d.fecha_desde), sig(d.saldo_anterior || 0)]].concat(movs.map(m => [dm(m.fecha) + ' ' + m.detalle, sig(m.importe)])) : [];
   // 10/11 (pedido del usuario): se aclara cuánto quedó (si se pagó todo, dice 'pagada').
   if (detalle.length) detalle.push([previo > 0 ? 'Queda debiendo' : previo < 0 ? 'Queda a favor' : 'Queda pagada', previo === 0 ? '$0' : plata(previo)]);
   const tituloDet = movs.length ? (previo < 0 ? 'Saldo a favor de antes' : previo === 0 ? 'Deuda anterior (ya pagada)' : 'Deuda anterior') + ':' : '';
