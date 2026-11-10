@@ -29,7 +29,16 @@ const linsDe = (i) => (Array.isArray(i.lineas) ? i.lineas : []);
 const PREF = { extra: 'Extra: ', devolucion: 'Devolución: ' };
 // Filas de un dia: [texto, importe, clase, esItem]. Una sola fuente para pantalla, impresion e imagen.
 function filasDia(x) {
-  const out = x.lineas.map(l => (typeof l.importe === 'number' ? [l.detalle + cuenta(l), plata(l.importe), '', false] : [l.detalle, cant(l), '', false]));
+  const esp = x.cuenta_especial;
+  // 10/11 (pedido del usuario): con cuenta especial (Hugo) el pan francés se muestra como su cuenta real, no a precio de lista.
+  const out = x.lineas.filter(l => !(esp && l.en_cuenta)).map(l => (typeof l.importe === 'number' ? [l.detalle + cuenta(l), plata(l.importe), '', false] : [l.detalle, cant(l), '', false]));
+  if (esp) {
+    const kg = (v) => ENT.format(v) + ' kg', neto = Math.round((esp.kg_frances - esp.kg_descuento) * 100) / 100, val = (esp.importe < 0 ? '− ' : '') + plata(esp.importe);
+    if (esp.kg_descuento > 0) {
+      out.unshift(['Pan francés · ' + kg(esp.kg_frances), '', '', false], ['Menos caserito y galleta · ' + kg(esp.kg_descuento), '', '', false],
+        [(neto < 0 ? 'Quedan a favor ' + kg(-neto) : 'Quedan ' + kg(neto)) + ' × ' + plata(esp.precio_kg), val, esp.importe < 0 ? 'menos' : '', false]);
+    } else out.unshift(['Pan francés · ' + kg(esp.kg_frances) + ' × ' + plata(esp.precio_kg), val, '', false]);
+  }
   if (typeof x.ajuste === 'number' && Math.abs(x.ajuste) >= 0.01) out.push(['Diferencia de precio del día', (x.ajuste > 0 ? '+ ' : '− ') + plata(x.ajuste), x.ajuste > 0 ? 'mas' : 'menos', true]);
   for (const i of items(x)) {
     const ls = linsDe(i), pref = PREF[i.tipo];
@@ -45,18 +54,21 @@ const diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.pars
 // Filas de totales (texto, importe con signo, clase). Una sola fuente para pantalla, impresión e imagen.
 // 05/11 (pedido del usuario): resumen simple = pedidos del período + lo que quedaba de antes. "Deuda anterior" ya tiene descontados
 // los pagos y los ajustes del período; abajo se detalla qué incluye (saldo de antes + cada pago/ajuste). Total = pedidos del período + deuda anterior (igual que antes).
+const movsDe = (d) => (Array.isArray(d.movimientos_periodo) ? d.movimientos_periodo : []);
 function resumen(d) {
   const previo = Math.round(((d.saldo_anterior || 0) + (d.pagos_periodo || 0) + (d.ajustes_periodo || 0)) * 100) / 100;
   const filas = [['Pedidos del período', plata(d.total_pedidos), '']];
   if (previo < 0) filas.push(['A favor de antes', '− ' + plata(previo), 'favor']);
-  else filas.push(['Deuda anterior', (previo > 0 ? '+ ' : '') + plata(previo), previo > 0 ? 'deuda' : '']);
+  else filas.push(['Deuda anterior', previo === 0 && movsDe(d).length ? 'Pagada' : (previo > 0 ? '+ ' : '') + plata(previo), previo > 0 ? 'deuda' : '']);
   const t = d.total_a_pagar;
   const final = t < 0 ? { txt: 'Le queda a favor', val: plata(t), cls: 'favorfin' } : { txt: 'Total a pagar', val: plata(t), cls: 'pagar' };
   // 05/11 (pedido del usuario): debajo, el detalle de lo que incluye la deuda anterior (lo de antes + pagos y ajustes del período).
-  const movs = Array.isArray(d.movimientos_periodo) ? d.movimientos_periodo : [];
+  const movs = movsDe(d);
   const sig = (v) => (v > 0 ? '+ ' : v < 0 ? '− ' : '') + plata(v);
   const detalle = movs.length ? [['Saldo antes del ' + dm(d.fecha_desde), sig(d.saldo_anterior || 0)]].concat(movs.map(m => [dm(m.fecha) + ' ' + m.detalle, sig(m.importe)])) : [];
-  const tituloDet = movs.length ? (previo < 0 ? 'A favor de antes' : 'Deuda anterior') + ' incluye:' : '';
+  // 10/11 (pedido del usuario): se aclara cuánto quedó (si se pagó todo, dice 'pagada').
+  if (detalle.length) detalle.push([previo > 0 ? 'Queda debiendo' : previo < 0 ? 'Queda a favor' : 'Queda pagada', previo === 0 ? '$0' : plata(previo)]);
+  const tituloDet = movs.length ? (previo < 0 ? 'Saldo a favor de antes' : previo === 0 ? 'Deuda anterior (ya pagada)' : 'Deuda anterior') + ':' : '';
   const notas = [];
   if (previo !== 0 && !movs.length) notas.push((previo > 0 ? 'Deuda anterior' : 'A favor de antes') + ' = lo que quedaba de antes del ' + dmy(d.fecha_desde) + '.');
   if (t < 0) notas.push('No tiene nada para pagar. El saldo a favor se descuenta de los próximos pedidos.');
@@ -80,7 +92,7 @@ export function htmlBoleta(d, logoSrc) {
     '<table><thead><tr><th>Fecha</th><th>Detalle</th><th class="n">Total del día</th></tr></thead><tbody>' + filasDias + '</tbody></table>' +
     '<div class="gb-tot">' + r.filas.map(([a, b, c]) => '<div class="gb-r ' + c + '"><span>' + esc(a) + '</span><b>' + esc(b) + '</b></div>').join('') +
     '<div class="gb-r gb-final ' + r.final.cls + '"><span>' + esc(r.final.txt) + '</span><b>' + esc(r.final.val) + '</b></div></div>' +
-    (r.detalle.length ? '<div class="gb-det"><div class="gb-det-t">' + esc(r.tituloDet) + '</div>' + r.detalle.map(([a, b]) => '<div class="gb-it"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') + '</div>' : '') +
+    (r.detalle.length ? '<div class="gb-det"><div class="gb-det-t">' + esc(r.tituloDet) + '</div>' + r.detalle.map(([a, b], i) => '<div class="gb-it' + (i === r.detalle.length - 1 ? ' gb-q' : '') + '"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') + '</div>' : '') +
     r.notas.map(t => '<p class="gb-nota">' + esc(t) + '</p>').join('') +
     '<p class="gb-leg">Comprobante interno · No válido como factura</p></div>';
 }
@@ -199,8 +211,8 @@ async function imagenBoleta(d) {
   y += 52;
   if (r.detalle.length) {
     g.textAlign = 'left'; g.fillStyle = '#6B6350'; g.font = F('600', 12); y += 4; g.fillText(r.tituloDet, P, y);
-    for (const [a, b] of r.detalle) {
-      y += 18; g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('400', 12); g.fillText(recorta(a, W - 2 * P - 110), P, y);
+    for (const [i, [a, b]] of r.detalle.entries()) {
+      y += 18; g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F(i === r.detalle.length - 1 ? '700' : '400', 12); g.fillText(recorta(a, W - 2 * P - 110), P, y);
       g.textAlign = 'right'; g.fillText(b, W - P, y);
     }
     y += 12;
