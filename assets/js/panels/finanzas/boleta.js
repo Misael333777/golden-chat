@@ -20,6 +20,25 @@ const sumarDias = (f, n) => new Date(Date.parse(f + 'T12:00:00Z') + n * 86400e3)
 const items = (x) => (Array.isArray(x.items) ? x.items : []);
 const itemTxt = (i) => (i.importe > 0 ? '+ ' : i.importe < 0 ? '− ' : '') + (i.importe ? plata(i.importe) : 'sin cargo');
 const itemCls = (i) => (i.importe > 0 ? 'mas' : i.importe < 0 ? 'menos' : '');
+// 10/11 (pedido del usuario): cada linea muestra 'cantidad × precio' y su subtotal; extras y devoluciones igual, en su dia.
+// El precio se muestra solo si cierra la cuenta (cantidad × precio = subtotal); si no, solo cantidad y subtotal.
+const precioOk = (l) => typeof l.precio === 'number' && typeof l.importe === 'number' && typeof l.cantidad === 'number' && Math.abs(Math.abs(l.cantidad * l.precio) - Math.abs(l.importe)) < 0.01;
+const cuenta = (l) => { const q = cant(l); return (q ? ' · ' + q : '') + (precioOk(l) ? ' × ' + plata(l.precio) : ''); };
+const linsDe = (i) => (Array.isArray(i.lineas) ? i.lineas : []);
+const PREF = { extra: 'Extra: ', devolucion: 'Devolución: ' };
+// Filas de un dia: [texto, importe, clase, esItem]. Una sola fuente para pantalla, impresion e imagen.
+function filasDia(x) {
+  const out = x.lineas.map(l => (typeof l.importe === 'number' ? [l.detalle + cuenta(l), plata(l.importe), '', false] : [l.detalle, cant(l), '', false]));
+  if (typeof x.ajuste === 'number' && Math.abs(x.ajuste) >= 0.01) out.push(['Diferencia de precio del día', (x.ajuste > 0 ? '+ ' : '− ') + plata(x.ajuste), x.ajuste > 0 ? 'mas' : 'menos', true]);
+  for (const i of items(x)) {
+    const ls = linsDe(i), pref = PREF[i.tipo];
+    const cierra = pref && ls.length && ls.every(l => typeof l.importe === 'number') && Math.abs(ls.reduce((a, l) => a + Math.abs(l.importe), 0) - Math.abs(i.importe || 0)) < 0.01 && i.importe;
+    if (cierra) ls.forEach(l => out.push([pref + l.detalle + cuenta(l), (i.importe < 0 ? '− ' : '+ ') + plata(l.importe), itemCls(i), true]));
+    else out.push([i.detalle, itemTxt(i), itemCls(i), true]);
+  }
+  if (!out.length) out.push(['Pedido del día', '', '', false]);
+  return out;
+}
 const diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 86400e3) + 1;
 
 // Filas de totales (texto, importe con signo, clase). Una sola fuente para pantalla, impresión e imagen.
@@ -52,13 +71,12 @@ const CSS_URL = 'assets/css/boleta.css';
 export function htmlBoleta(d, logoSrc) {
   const r = resumen(d);
   const filasDias = d.dias.map(x => '<tr><td class="f">' + esc(diaTxt(x.fecha)) + '</td><td>' +
-    (x.lineas.length ? x.lineas.map(l => '<div class="gb-it"><span>' + esc(l.detalle) + '</span><span>' + esc(cant(l)) + '</span></div>').join('') : (items(x).length ? '' : '<div class="gb-it"><span>Pedido del día</span><span></span></div>')) +
-    items(x).map(i => '<div class="gb-it gb-x ' + itemCls(i) + '"><span>' + esc(i.detalle) + '</span><span>' + esc(itemTxt(i)) + '</span></div>').join('') +
+    filasDia(x).map(([a, b, c, it]) => '<div class="gb-it' + (it ? ' gb-x ' + c : '') + '"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') +
     '</td><td class="n">' + esc(plata(x.importe)) + '</td></tr>').join('');
   return '<div class="gb">' +
     '<div class="gb-head"><img src="' + esc(logoSrc || LOGO) + '" alt="Golden"><div class="gb-hd"><div class="gb-t">Boleta de pedidos</div><div class="gb-m">Emitida ' + esc(dmy(hoyART())) + '</div></div></div>' +
     '<div class="gb-datos"><div><span>Cliente</span><b>' + esc(d.persona.nombre) + '</b></div><div><span>' + (d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período') + '</span><b>' + esc(periodoTxt(d)) + '</b></div></div>' +
-    '<table><thead><tr><th>Fecha</th><th>Pedido</th><th class="n">Importe</th></tr></thead><tbody>' + filasDias + '</tbody></table>' +
+    '<table><thead><tr><th>Fecha</th><th>Detalle</th><th class="n">Total del día</th></tr></thead><tbody>' + filasDias + '</tbody></table>' +
     '<div class="gb-tot">' + r.filas.map(([a, b, c]) => '<div class="gb-r ' + c + '"><span>' + esc(a) + '</span><b>' + esc(b) + '</b></div>').join('') +
     '<div class="gb-r gb-final ' + r.final.cls + '"><span>' + esc(r.final.txt) + '</span><b>' + esc(r.final.val) + '</b></div></div>' +
     (r.detalle.length ? '<div class="gb-det"><div class="gb-det-t">' + esc(r.tituloDet) + '</div>' + r.detalle.map(([a, b]) => '<div class="gb-it"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') + '</div>' : '') +
@@ -133,12 +151,12 @@ function imprimir(d) {
 // Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp.
 async function imagenBoleta(d) {
   const r = resumen(d);
-  const S = 2, W = 420, P = 22;
+  const S = 2, W = 560, P = 22;
   const logo = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = LOGO; });
   try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (err) { /* sin fuentes: usa las del sistema */ }
   const F = (peso, tam, serif) => peso + ' ' + tam + 'px ' + (serif ? 'Fraunces, Georgia, serif' : 'Manrope, system-ui, sans-serif');
   // Alto: cabecera + datos + encabezado tabla + filas + totales + notas
-  const altoDia = (x) => Math.max(1, x.lineas.length + items(x).length) * 18 + 14;
+  const altoDia = (x) => filasDia(x).length * 18 + 14;
   const H = 70 + 60 + 26 + d.dias.reduce((a, x) => a + altoDia(x), 0) + 16 + r.filas.length * 26 + 52 + r.notas.length * 34 + (r.detalle.length ? (r.detalle.length + 1) * 18 + 12 : 0) + 46;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext('2d'); g.scale(S, S);
@@ -153,20 +171,15 @@ async function imagenBoleta(d) {
   y += 18; g.fillStyle = '#241F16'; g.font = F('800', 14);
   const recorta = (t, max) => { let s = String(t); while (s.length > 1 && g.measureText(s).width > max) s = s.slice(0, -2) + '…'; return s; };
   g.fillText(recorta(d.persona.nombre, W / 2 - P - 8), P, y); g.fillText(periodoTxt(d), W / 2, y);
-  y += 26; g.fillStyle = '#6B6350'; g.font = F('600', 11); g.fillText('Fecha', P, y); g.fillText('Pedido', P + 82, y); g.textAlign = 'right'; g.fillText('Importe', W - P, y);
+  y += 26; g.fillStyle = '#6B6350'; g.font = F('600', 11); g.fillText('Fecha', P, y); g.fillText('Detalle', P + 82, y); g.textAlign = 'right'; g.fillText('Total del día', W - P, y);
   y += 7; g.fillStyle = '#C9B37C'; g.fillRect(P, y, W - 2 * P, 1);
   for (const x of d.dias) {
     let yy = y + 18;
     g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('600', 13); g.fillText(diaTxt(x.fecha), P, yy);
     g.textAlign = 'right'; g.font = F('400', 13); g.fillText(plata(x.importe), W - P, yy);
-    const ls = x.lineas.length || items(x).length ? x.lineas : [{ detalle: 'Pedido del día', cantidad: null }];
-    for (const l of ls) {
-      g.textAlign = 'left'; g.fillStyle = '#241F16'; g.fillText(recorta(l.detalle, 150), P + 82, yy);
-      g.textAlign = 'right'; g.fillStyle = '#6B6350'; g.fillText(cant(l), W - P - 92, yy); yy += 18;
-    }
-    for (const i of items(x)) {
-      g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F('400', 12); g.fillText(recorta(i.detalle, 170), P + 82, yy);
-      g.textAlign = 'right'; g.fillStyle = i.importe > 0 ? '#A63D2F' : i.importe < 0 ? '#3F7D57' : '#6B6350'; g.fillText(itemTxt(i), W - P - 92, yy); g.font = F('400', 13); yy += 18;
+    for (const [a, b, c, it] of filasDia(x)) {
+      g.textAlign = 'left'; g.fillStyle = '#241F16'; g.font = F(it ? 'italic 400' : '400', it ? 12 : 13); g.fillText(recorta(a, W - P - 92 - (P + 82) - 84), P + 82, yy);
+      g.textAlign = 'right'; g.fillStyle = c === 'mas' ? '#A63D2F' : c === 'menos' ? '#3F7D57' : '#6B6350'; g.fillText(b, W - P - 92, yy); g.font = F('400', 13); yy += 18;
     }
     y += altoDia(x);
     g.fillStyle = '#E2D6B8'; for (let i = P; i < W - P; i += 6) g.fillRect(i, y, 3, 1);

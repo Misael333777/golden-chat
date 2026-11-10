@@ -1,5 +1,5 @@
 /* Boleta de pedidos (Admin Finanzas). Archivo propio: la CSP de la página no permite estilos inline. */
-.gb{background:#fff;color:#241F16;font-family:Manrope,system-ui,-apple-system,'Segoe UI',sans-serif;max-width:420px;margin:0 auto;padding:20px;border:1px solid #C9B37C;border-radius:14px;box-sizing:border-box}
+.gb{background:#fff;color:#241F16;font-family:Manrope,system-ui,-apple-system,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:20px;border:1px solid #C9B37C;border-radius:14px;box-sizing:border-box}
 .gb-head{display:flex;align-items:center;gap:12px;border-bottom:2px solid #C9994A;padding-bottom:12px}
 .gb-head img{width:96px;height:auto}.gb-hd{margin-left:auto;text-align:right}.gb-t{font-family:Fraunces,Georgia,serif;font-size:17px}.gb-m{font-size:11px;color:#6B6350}
 .gb-datos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}.gb-datos span{display:block;font-size:11px;color:#6B6350}.gb-datos b{font-size:14px}
@@ -17,3 +17,5 @@
 body.gb-print{margin:0;background:#fff}body.gb-print .gb{border:none;max-width:none}
 @page{margin:12mm}
 .gb-frame{position:fixed;right:0;bottom:0;width:0;height:0;border:0}
+/* 10/11: en celular la fecha y el total del día van arriba y el detalle abajo a todo el ancho (las líneas con precio son más largas). */
+@media (max-width:520px){.gb thead{display:none}.gb tr{display:grid;grid-template-columns:1fr auto;border-bottom:1px dashed #E2D6B8}.gb td{border:0;padding:7px 0 0}.gb td.f{grid-row:1;grid-column:1}.gb td.n{grid-row:1;grid-column:2;font-weight:600}.gb td:nth-child(2){grid-row:2;grid-column:1/-1;padding:3px 0 7px}.gb-it{padding-right:0}}
