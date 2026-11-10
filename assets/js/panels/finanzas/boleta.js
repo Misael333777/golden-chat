@@ -13,7 +13,8 @@ const plata = (v) => (typeof v === 'number' && Number.isFinite(v) ? '$' + ENT.fo
 const dm = (f) => f.slice(8, 10) + '/' + f.slice(5, 7);
 const dmy = (f) => dm(f) + '/' + f.slice(0, 4);
 const diaTxt = (f) => DIAS[new Date(f + 'T12:00:00Z').getUTCDay()] + ' ' + dm(f);
-const cant = (l) => (l.cantidad === null || l.cantidad === undefined ? '' : ENT.format(l.cantidad) + (l.unidad ? ' ' + l.unidad : ''));
+// 10/11: una unidad que es solo un número (p. ej. '1') no se muestra: confundía ('2 1 × $3.500').
+const cant = (l) => (l.cantidad === null || l.cantidad === undefined ? '' : ENT.format(l.cantidad) + (l.unidad && !/^\d+$/.test(l.unidad) ? ' ' + l.unidad : ''));
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const sumarDias = (f, n) => new Date(Date.parse(f + 'T12:00:00Z') + n * 86400e3).toISOString().slice(0, 10);
 // 29/10: extras, devoluciones y ajustes del dia (items) con su importe; los extras sin confirmar se avisan solo en pantalla.
