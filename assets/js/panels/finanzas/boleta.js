@@ -39,6 +39,8 @@ function filasDia(x) {
     const kg = (v) => ENT.format(v) + ' kg', neto = Math.round((esp.kg_frances - esp.kg_descuento) * 100) / 100;
     out.push({ nom: 'Pan francés', sub: esp.kg_descuento > 0 ? kg(esp.kg_frances) + ' − ' + kg(esp.kg_descuento) + ' caserito y galleta = ' + kg(neto) + ' × ' + plata(esp.precio_kg) : kg(esp.kg_frances) + ' × ' + plata(esp.precio_kg),
       val: (esp.importe < 0 ? '− ' : '') + plata(esp.importe), cls: esp.importe < 0 ? 'menos' : '' });
+    // 10/11 (pedido del usuario): caserito/galleta que otro cliente llevó como extra, debajo del pan francés: '− 3 kg extra que llevó Damián × $1.350'.
+    (Array.isArray(esp.extras) ? esp.extras : []).forEach(x => out.push({ nom: '− ' + ENT.format(x.kg) + ' kg extra que llevó ' + x.nombre, sub: ENT.format(x.kg) + ' kg × ' + plata(esp.precio_kg), val: '− ' + plata(x.importe), cls: 'menos' }));
   }
   x.lineas.filter(l => !(esp && l.en_cuenta)).forEach(l => out.push({ nom: l.detalle, sub: typeof l.importe === 'number' ? cuenta(l) : cant(l), val: typeof l.importe === 'number' ? plata(l.importe) : '', cls: '' }));
   if (typeof x.ajuste === 'number' && Math.abs(x.ajuste) >= 0.01) out.push({ tag: 'AJUSTE', tagCls: 'aj', nom: 'Diferencia de precio', sub: '', val: valTxt(x.ajuste), cls: valCls(x.ajuste) });
