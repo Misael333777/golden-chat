@@ -12,13 +12,14 @@ export function vistaInicio(ctx, cont, mostrar = false) {
   const desde = hoy.slice(0, 8) + '01';
   const periodo = el('div', { class: 'stack', id: 'fin-periodo', 'data-estado': 'cargando' });
   const cuerpo = el('div', { class: 'stack', id: 'fin-resumen', 'data-estado': 'cargando' });
+  const zonaExtras = el('div', { class: 'stack', id: 'fin-aviso-extras-zona' }); // 10/11: aviso arriba si algún extra no se cobró solo
   const atajo = (id, titulo, texto, boton, clase) => el('div', { class: 'shortcut', 'data-atajo': 'fin-' + id },
     el('span', { class: 'shortcut-ico', 'aria-hidden': 'true' }), el('h3', { text: titulo }), el('p', { class: 'muted small', text: texto }),
     el('a', { class: 'btn ' + clase, href: '#/finanzas/' + id }, boton));
   montar(cont, el('div', { class: 'card stack card-welcome' },
     el('div', null, el('div', { class: 'row' }, el('span', { class: 'eyebrow', text: 'Resumen' }), el('span', { class: 'spacer' }), bOjo), el('h2', { text: 'Inicio' }),
       el('p', { class: 'muted', text: 'Mes en curso (' + fmtFecha(desde) + ' al ' + fmtFecha(hoy) + '). Todo se calcula desde los movimientos registrados.' })),
-    periodo, cuerpo,
+    zonaExtras, periodo, cuerpo,
     el('div', { class: 'shortcut-grid' },
       atajo('cobros', 'Registrar cobro', 'Dinero que entra de un cliente o repartidor.', 'Nuevo cobro', 'btn-primary'),
       atajo('gastos', 'Registrar gasto', 'Dinero que sale por un gasto.', 'Nuevo gasto', 'btn-ghost'),
@@ -48,9 +49,11 @@ export function vistaInicio(ctx, cont, mostrar = false) {
         tile('Total por cobrar', pesos(d.total_falta_pagar), 'por_cobrar'), tile('Saldo a favor de clientes', pesos(d.total_saldo_a_favor), 'a_favor'),
         tile('Alertas de conciliación', String((d.inconsistencias || 0) + (d.pagos_no_conciliados || 0) + (d.extras_en_error || 0)), 'alertas')),
       // 10/11 (pedido del usuario): los extras se cobran solos; solo se avisa si alguno no se pudo cobrar (con botón para revisarlo).
-      (d.extras_pendientes || 0) + (d.extras_en_error || 0) > 0 ? el('div', { class: 'notice pending stack', id: 'fin-aviso-extras' },
-        el('p', { text: 'Hay ' + ((d.extras_pendientes || 0) + (d.extras_en_error || 0)) + ' extra(s) que no se pudieron cobrar solos.' }),
-        el('a', { class: 'btn btn-ghost btn-sm', href: '#/finanzas/extras' }, 'Revisar extras')) : null,
+
       el('p', { class: 'muted small', text: 'Cuenta corriente calculada: ' + fmtFecha(d.generado_al) }));
+    const nEx = (d.extras_pendientes || 0) + (d.extras_en_error || 0);
+    montar(zonaExtras, nEx > 0 ? el('div', { class: 'notice pending', id: 'fin-aviso-extras', role: 'alert' },
+      el('div', { class: 'row' }, el('span', { text: nEx === 1 ? 'Hay 1 extra que no se pudo cobrar solo.' : 'Hay ' + nEx + ' extras que no se pudieron cobrar solos.' }), el('span', { class: 'spacer' }),
+        el('a', { class: 'btn btn-primary btn-sm', href: '#/finanzas/extras' }, 'Revisar extras'))) : null);
   });
 }
