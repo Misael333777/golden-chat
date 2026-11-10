@@ -60,23 +60,23 @@ const diasEntre = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.pars
 // 05/11 (pedido del usuario): resumen simple = pedidos del período + lo que quedaba de antes. "Deuda anterior" ya tiene descontados
 // los pagos y los ajustes del período; abajo se detalla qué incluye (saldo de antes + cada pago/ajuste). Total = pedidos del período + deuda anterior (igual que antes).
 const movsDe = (d) => (Array.isArray(d.movimientos_periodo) ? d.movimientos_periodo : []);
+// 10/11 (pedido del usuario): la cuenta se lee de arriba hacia abajo: debía de antes + pedidos − pagos (y ajustes) = total.
+// Antes los pagos se restaban de la deuda de antes y aparecía 'a favor de antes' aunque el cliente no tuviera plata a favor.
 function resumen(d) {
-  const previo = Math.round(((d.saldo_anterior || 0) + (d.pagos_periodo || 0) + (d.ajustes_periodo || 0)) * 100) / 100;
-  const filas = [[d.fecha_desde === d.fecha_hasta ? 'Pedidos del día' : 'Pedidos del período', plata(d.total_pedidos), '']];
-  if (previo < 0) filas.push(['A favor de antes', '− ' + plata(previo), 'favor']);
-  else filas.push(['Deuda anterior', previo === 0 && movsDe(d).length ? 'Pagada ✓' : (previo > 0 ? '+ ' : '') + plata(previo), previo > 0 ? 'deuda' : previo === 0 && movsDe(d).length ? 'favor' : '']);
-  const t = d.total_a_pagar;
-  const final = t < 0 ? { txt: 'Le queda a favor', val: plata(t), cls: 'favorfin' } : { txt: 'Total a pagar', val: plata(t), cls: 'pagar' };
-  // 05/11 (pedido del usuario): debajo, el detalle de lo que incluye la deuda anterior (lo de antes + pagos y ajustes del período).
   const movs = movsDe(d);
   const sig = (v) => (v > 0 ? '+ ' : v < 0 ? '− ' : '') + plata(v);
-  // 10/11 (pedido del usuario): si la deuda anterior quedó pagada, solo dice 'Pagada' (sin detalle).
-  const detalle = movs.length && previo !== 0 ? [['Saldo antes del ' + dm(d.fecha_desde), sig(d.saldo_anterior || 0)]].concat(movs.map(m => [dm(m.fecha) + ' ' + m.detalle, sig(m.importe)])) : [];
-  // 10/11 (pedido del usuario): se aclara cuánto quedó (si se pagó todo, dice 'pagada').
-  if (detalle.length) detalle.push([previo > 0 ? 'Queda debiendo' : previo < 0 ? 'Queda a favor' : 'Queda pagada', previo === 0 ? '$0' : plata(previo)]);
-  const tituloDet = movs.length ? (previo < 0 ? 'Saldo a favor de antes' : previo === 0 ? 'Deuda anterior (ya pagada)' : 'Deuda anterior') + ':' : '';
+  const ant = Math.round((d.saldo_anterior || 0) * 100) / 100;
+  const pag = Math.round(((d.pagos_periodo || 0) + (d.ajustes_periodo || 0)) * 100) / 100;
+  const filas = [
+    ant < 0 ? ['A favor de antes', '− ' + plata(ant), 'favor'] : ['Debía de antes', plata(ant), ant > 0 ? 'deuda' : ''],
+    [d.fecha_desde === d.fecha_hasta ? 'Pedidos del día' : 'Pedidos del período', '+ ' + plata(d.total_pedidos), ''],
+  ];
+  if (movs.length || pag !== 0) filas.push([(d.ajustes_periodo || 0) !== 0 ? 'Pagos y ajustes' : 'Pagos', sig(pag), pag < 0 ? 'favor' : pag > 0 ? 'deuda' : '']);
+  const t = d.total_a_pagar;
+  const final = t < 0 ? { txt: 'Le queda a favor', val: plata(t), cls: 'favorfin' } : { txt: 'Total a pagar', val: plata(t), cls: 'pagar' };
+  const detalle = movs.map(m => [dm(m.fecha) + ' ' + m.detalle, sig(m.importe)]);
+  const tituloDet = movs.length ? ((d.ajustes_periodo || 0) !== 0 ? 'Pagos y ajustes:' : 'Pagos:') : '';
   const notas = [];
-  if (previo !== 0 && !movs.length) notas.push((previo > 0 ? 'Deuda anterior' : 'A favor de antes') + ' = lo que quedaba de antes del ' + dmy(d.fecha_desde) + '.');
   if (t < 0) notas.push('No tiene nada para pagar. El saldo a favor se descuenta de los próximos pedidos.');
   if (d.dias_sin_importe > 0) notas.push('Hay ' + d.dias_sin_importe + (d.dias_sin_importe === 1 ? ' día' : ' días') + ' con importe a confirmar (no suman al total).');
   if (!d.dias.length) notas.push('No hay pedidos en planillas cerradas de este período.');
@@ -97,7 +97,7 @@ export function htmlBoleta(d, logoSrc) {
     '<div class="gb-datos"><div><span>Cliente</span><b>' + esc(d.persona.nombre) + '</b></div><div class="der"><span>' + (d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período') + '</span><b>' + esc(periodoTxt(d)) + '</b></div></div>' +
     '<div class="gb-hero ' + r.final.cls + '"><span>' + esc(r.final.txt) + '</span><b>' + esc(r.final.val) + '</b></div>' +
     '<div class="gb-mini">' + r.filas.map(([a, b, c]) => '<div><span>' + esc(a) + '</span><b class="' + c + '">' + esc(b) + '</b></div>').join('') + '</div>' +
-    (r.detalle.length ? '<div class="gb-det"><div class="gb-det-t">' + esc(r.tituloDet) + '</div>' + r.detalle.map(([a, b], i) => '<div class="gb-dl' + (i === r.detalle.length - 1 ? ' gb-q' : '') + '"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') + '</div>' : '') +
+    (r.detalle.length ? '<div class="gb-det"><div class="gb-det-t">' + esc(r.tituloDet) + '</div>' + r.detalle.map(([a, b]) => '<div class="gb-dl"><span>' + esc(a) + '</span><span>' + esc(b) + '</span></div>').join('') + '</div>' : '') +
     (d.dias.length ? '<h3 class="gb-h3">DÍA POR DÍA</h3>' + dias + '<p class="gb-ley"><span class="mas">+</span> suma a su cuenta · <span class="menos">−</span> se descuenta</p>' : '') +
     r.notas.map(t => '<p class="gb-nota">' + esc(t) + '</p>').join('') +
     '<p class="gb-leg">Comprobante interno · No válido como factura</p></div>';
@@ -201,12 +201,12 @@ async function imagenBoleta(d) {
   caja(P, y, W - 2 * P, 62, 14, fav ? '#E6F2EA' : '#FBF1DC', fav ? '#3F7D57' : '#C9994A', 2);
   txt(r.final.txt, P + 18, y + 38, F('400', 16), '#241F16'); txt(r.final.val, W - P - 18, y + 41, F('800', 27), '#241F16', 'right');
   // Cajitas
-  y += 74; const cw = (W - 2 * P - 8) / 2;
+  y += 74; const nb = r.filas.length, cw = (W - 2 * P - 8 * (nb - 1)) / nb;
   r.filas.forEach(([a, b, c], i) => { const x = P + i * (cw + 8); caja(x, y, cw, 46, 10, '#FAF7EF'); txt(a, x + 10, y + 18, F('400', 12), '#6B6350', 'left', cw - 20); txt(b, x + 10, y + 36, F('800', 14), COL[c] || '#241F16', 'left', cw - 20); });
   y += 46;
   if (r.detalle.length) {
     y += 22; txt(r.tituloDet, P, y, F('700', 12), '#6B6350');
-    r.detalle.forEach(([a, b], i) => { y += 18; const ult = i === r.detalle.length - 1; if (ult) { g.fillStyle = '#EFE6D0'; g.fillRect(P, y - 13, W - 2 * P, 1); } txt(a, P, y, F(ult ? '700' : '400', 12), '#241F16', 'left', W - 2 * P - 110); txt(b, W - P, y, F(ult ? '700' : '400', 12), '#241F16', 'right'); });
+    r.detalle.forEach(([a, b]) => { y += 18; txt(a, P, y, F('400', 12), '#241F16', 'left', W - 2 * P - 110); txt(b, W - P, y, F('400', 12), '#241F16', 'right'); });
   }
   if (d.dias.length) {
     y += 30; txt('DÍA POR DÍA', P, y, F('700', 12), '#8A7F66'); y += 10;
