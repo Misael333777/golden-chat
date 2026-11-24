@@ -24,7 +24,3 @@ body.gb-print{margin:0;background:#fff}body.gb-print .gb{border:none}
 .btn.btn-wsp:hover{background:#1EBE5A;border-color:#1EBE5A}
 @page{margin:12mm}
 .gb-frame{position:fixed;right:0;bottom:0;width:0;height:0;border:0}
-/* 24/11: la boleta se muestra e imprime como la imagen horizontal de WhatsApp */
-.gb-img{display:block;width:100%;height:auto;border:1px solid #EADFC6;border-radius:12px;background:#fff}
-@page apaisada{size:A4 landscape;margin:8mm}
-body.gb-print-img{margin:0;background:#fff;page:apaisada}body.gb-print-img img{display:block;max-width:100%;max-height:100vh;width:auto;height:auto;margin:0 auto}

@@ -137,33 +137,25 @@ export function abrirBoleta(ctx, quien) {
   }, 'Armando…'));
 }
 
-// 24/11 (pedido del usuario): Administración ve la boleta igual que el cliente: la misma imagen horizontal que se manda por WhatsApp.
-// Si la imagen no se puede armar, se muestra la boleta en texto como antes.
-const aDataUrl = (blob) => new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(null); fr.readAsDataURL(blob); });
-async function mostrar(zona, d) {
+function mostrar(zona, d) {
   cssEnPagina();
-  const vista = el('div', { id: 'bol-vista', 'data-total': String(d.total_a_pagar) }, el('p', { class: 'muted small', text: 'Armando la boleta…' }));
+  const vista = el('div', { id: 'bol-vista', 'data-total': String(d.total_a_pagar) });
+  vista.innerHTML = htmlBoleta(d); // todo el texto va escapado en htmlBoleta
   const bImp = el('button', { type: 'button', class: 'btn btn-gold', id: 'bol-imprimir' }, 'Imprimir');
   const bWsp = el('button', { type: 'button', class: 'btn btn-wsp', id: 'bol-compartir' }, 'WhatsApp');
+  bImp.addEventListener('click', () => imprimir(d));
+  bWsp.addEventListener('click', conBloqueo(bWsp, () => compartir(d), 'Preparando…'));
   const pend = Array.isArray(d.extras_sin_confirmar) ? d.extras_sin_confirmar : [];
   const avisoPend = pend.length ? aviso('pending', 'Hay ' + pend.length + (pend.length === 1 ? ' extra entregado' : ' extras entregados') + ' sin confirmar en Finanzas → Extras (' + [...new Set(pend.map(p => dm(p.fecha)))].join(', ') + '). No están en esta boleta: confirmalos y volvé a armarla.', 'EXTRAS_SIN_CONFIRMAR') : null;
   montar(zona, avisoPend, vista, el('div', { class: 'row' }, bImp, bWsp),
-    el('p', { class: 'muted small', text: 'Imprimir también permite "Guardar como PDF". WhatsApp comparte la boleta como imagen. En el celular, separá dos dedos sobre la boleta para agrandarla.' }));
-  let blob = null, src = null;
-  try { blob = await imagenBoleta(d); src = blob ? await aDataUrl(blob) : null; } catch (err) { blob = null; src = null; }
-  if (src) montar(vista, el('img', { class: 'gb-img', src, alt: 'Boleta de ' + (d.persona.nombre || 'cliente') }));
-  else vista.innerHTML = htmlBoleta(d); // todo el texto va escapado en htmlBoleta
-  bImp.addEventListener('click', () => imprimir(d, src));
-  bWsp.addEventListener('click', conBloqueo(bWsp, () => compartir(d, blob), 'Preparando…'));
+    el('p', { class: 'muted small', text: 'Imprimir también permite "Guardar como PDF". WhatsApp comparte la boleta como imagen.' }));
 }
 
 // Impresión en un iframe oculto: no cambia la página ni necesita ventanas nuevas.
-// 24/11: se imprime la misma imagen horizontal (hoja apaisada); sin imagen, la boleta en texto como antes.
-function imprimir(d, src) {
+function imprimir(d) {
   const logo = new URL(LOGO, document.baseURI).href;
   const css = new URL(CSS_URL, document.baseURI).href;
-  const cuerpo = src ? '<body class="gb-print-img"><img src="' + esc(src) + '" alt="Boleta"></body>' : '<body class="gb-print">' + htmlBoleta(d, logo) + '</body>';
-  const doc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Boleta ' + esc(d.persona.nombre) + '</title><link rel="stylesheet" href="' + esc(css) + '"></head>' + cuerpo + '</html>';
+  const doc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Boleta ' + esc(d.persona.nombre) + '</title><link rel="stylesheet" href="' + esc(css) + '"></head><body class="gb-print">' + htmlBoleta(d, logo) + '</body></html>';
   const fr = el('iframe', { title: 'Impresión de boleta', 'aria-hidden': 'true', class: 'gb-frame' });
   document.body.appendChild(fr);
   const w = fr.contentWindow;
@@ -174,7 +166,7 @@ function imprimir(d, src) {
   const esperas = [w.document.querySelector('link'), w.document.querySelector('img')].filter(Boolean).map(x => new Promise(ok => { if (x.tagName === 'IMG' && x.complete) return ok(); x.addEventListener('load', ok); x.addEventListener('error', ok); }));
   Promise.race([Promise.all(esperas), new Promise(ok => setTimeout(ok, 3000))]).then(() => setTimeout(lanzar, 100));
 }
-// Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp.
+// Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp. 24/11: la pantalla y la impresión siguen en vertical (como antes).
 // 24/11 (pedido del usuario): formato HORIZONTAL como el modelo que mandaron: cabecera con cliente y período, total + cuadros,
 // días en tarjetas de a 3 por fila (si el último queda solo, ocupa todo el ancho). Mismo contenido que antes; letra más grande.
 export async function imagenBoleta(d) {
@@ -332,8 +324,8 @@ export async function imagenBoleta(d) {
   return new Promise((ok) => final.toBlob((b) => ok(b), 'image/png'));
 }
 
-async function compartir(d, lista) {
-  const blob = lista || await imagenBoleta(d);
+async function compartir(d) {
+  const blob = await imagenBoleta(d);
   if (!blob) return toast('No se pudo preparar la imagen.');
   const nombre = 'Boleta ' + (d.persona.nombre || 'cliente').replace(/[^\p{L}\p{N} ]/gu, '').trim() + ' ' + d.fecha_desde + (d.fecha_hasta !== d.fecha_desde ? ' al ' + d.fecha_hasta : '') + '.png';
   const archivo = new File([blob], nombre, { type: 'image/png' });
