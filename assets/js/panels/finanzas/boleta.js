@@ -137,25 +137,33 @@ export function abrirBoleta(ctx, quien) {
   }, 'Armando…'));
 }
 
-function mostrar(zona, d) {
+// 24/11 (pedido del usuario): Administración ve la boleta igual que el cliente: la misma imagen horizontal que se manda por WhatsApp.
+// Si la imagen no se puede armar, se muestra la boleta en texto como antes.
+const aDataUrl = (blob) => new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = () => ok(null); fr.readAsDataURL(blob); });
+async function mostrar(zona, d) {
   cssEnPagina();
-  const vista = el('div', { id: 'bol-vista', 'data-total': String(d.total_a_pagar) });
-  vista.innerHTML = htmlBoleta(d); // todo el texto va escapado en htmlBoleta
+  const vista = el('div', { id: 'bol-vista', 'data-total': String(d.total_a_pagar) }, el('p', { class: 'muted small', text: 'Armando la boleta…' }));
   const bImp = el('button', { type: 'button', class: 'btn btn-gold', id: 'bol-imprimir' }, 'Imprimir');
   const bWsp = el('button', { type: 'button', class: 'btn btn-wsp', id: 'bol-compartir' }, 'WhatsApp');
-  bImp.addEventListener('click', () => imprimir(d));
-  bWsp.addEventListener('click', conBloqueo(bWsp, () => compartir(d), 'Preparando…'));
   const pend = Array.isArray(d.extras_sin_confirmar) ? d.extras_sin_confirmar : [];
   const avisoPend = pend.length ? aviso('pending', 'Hay ' + pend.length + (pend.length === 1 ? ' extra entregado' : ' extras entregados') + ' sin confirmar en Finanzas → Extras (' + [...new Set(pend.map(p => dm(p.fecha)))].join(', ') + '). No están en esta boleta: confirmalos y volvé a armarla.', 'EXTRAS_SIN_CONFIRMAR') : null;
   montar(zona, avisoPend, vista, el('div', { class: 'row' }, bImp, bWsp),
-    el('p', { class: 'muted small', text: 'Imprimir también permite "Guardar como PDF". WhatsApp comparte la boleta como imagen.' }));
+    el('p', { class: 'muted small', text: 'Imprimir también permite "Guardar como PDF". WhatsApp comparte la boleta como imagen. En el celular, separá dos dedos sobre la boleta para agrandarla.' }));
+  let blob = null, src = null;
+  try { blob = await imagenBoleta(d); src = blob ? await aDataUrl(blob) : null; } catch (err) { blob = null; src = null; }
+  if (src) montar(vista, el('img', { class: 'gb-img', src, alt: 'Boleta de ' + (d.persona.nombre || 'cliente') }));
+  else vista.innerHTML = htmlBoleta(d); // todo el texto va escapado en htmlBoleta
+  bImp.addEventListener('click', () => imprimir(d, src));
+  bWsp.addEventListener('click', conBloqueo(bWsp, () => compartir(d, blob), 'Preparando…'));
 }
 
 // Impresión en un iframe oculto: no cambia la página ni necesita ventanas nuevas.
-function imprimir(d) {
+// 24/11: se imprime la misma imagen horizontal (hoja apaisada); sin imagen, la boleta en texto como antes.
+function imprimir(d, src) {
   const logo = new URL(LOGO, document.baseURI).href;
   const css = new URL(CSS_URL, document.baseURI).href;
-  const doc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Boleta ' + esc(d.persona.nombre) + '</title><link rel="stylesheet" href="' + esc(css) + '"></head><body class="gb-print">' + htmlBoleta(d, logo) + '</body></html>';
+  const cuerpo = src ? '<body class="gb-print-img"><img src="' + esc(src) + '" alt="Boleta"></body>' : '<body class="gb-print">' + htmlBoleta(d, logo) + '</body>';
+  const doc = '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Boleta ' + esc(d.persona.nombre) + '</title><link rel="stylesheet" href="' + esc(css) + '"></head>' + cuerpo + '</html>';
   const fr = el('iframe', { title: 'Impresión de boleta', 'aria-hidden': 'true', class: 'gb-frame' });
   document.body.appendChild(fr);
   const w = fr.contentWindow;
@@ -166,91 +174,166 @@ function imprimir(d) {
   const esperas = [w.document.querySelector('link'), w.document.querySelector('img')].filter(Boolean).map(x => new Promise(ok => { if (x.tagName === 'IMG' && x.complete) return ok(); x.addEventListener('load', ok); x.addEventListener('error', ok); }));
   Promise.race([Promise.all(esperas), new Promise(ok => setTimeout(ok, 3000))]).then(() => setTimeout(lanzar, 100));
 }
-
-// Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp. 10/11: mismo diseño que la pantalla.
-async function imagenBoleta(d) {
+// Imagen PNG dibujada a mano (sin librerías externas) para compartir por WhatsApp.
+// 24/11 (pedido del usuario): formato HORIZONTAL como el modelo que mandaron: cabecera con cliente y período, total + cuadros,
+// días en tarjetas de a 3 por fila (si el último queda solo, ocupa todo el ancho). Mismo contenido que antes; letra más grande.
+export async function imagenBoleta(d) {
   const r = resumen(d);
-  const S = 2, W = 520, P = 22, IN = 12;
+  const S = 2, W = 1200, P = 28, GAP = 16, IN = 16;
   const logo = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = LOGO; });
   try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (err) { /* sin fuentes: usa las del sistema */ }
   const F = (peso, tam, serif) => peso + ' ' + tam + 'px ' + (serif ? 'Fraunces, Georgia, serif' : 'Manrope, system-ui, sans-serif');
+  const COL = { mas: '#A63D2F', menos: '#2F6B46', '': '#241F16', deuda: '#A63D2F', favor: '#2F6B46' };
+  const TAGC = { ext: ['#FBE3DE', '#A63D2F'], dev: ['#DDEFE3', '#2F6B46'], aj: ['#EEE9DD', '#6B6350'] };
   const filas = d.dias.map(filasDia);
-  const altoFila = (f) => (f.sub ? 42 : 28);
-  const H = 400 + filas.reduce((a, fs) => a + 46 + fs.reduce((b, f) => b + altoFila(f), 0), 0) + (r.detalle.length + 1) * 18 + r.notas.length * 40 + 140;
+  const HCAB = 52; // banda del día
+  const LW = (W - 2 * P - 2 * GAP) / 3 - 2 * IN; // ancho útil de un renglón
+  // Medición previa (para saber el alto antes de dibujar): nombres y aclaraciones largas pasan a 2 renglones en vez de cortarse.
+  const mg = document.createElement('canvas').getContext('2d');
+  const partir = (t, font, max, lineas) => {
+    mg.font = font; const pal = String(t || '').split(' '); const out = []; let lin = '';
+    for (const p of pal) { const pr = lin ? lin + ' ' + p : p; if (lin && mg.measureText(pr).width > max) { out.push(lin); lin = p; } else lin = pr; }
+    if (lin) out.push(lin);
+    if (out.length > lineas) { let u = out.slice(lineas - 1).join(' '); while (u.length > 1 && mg.measureText(u + '…').width > max) u = u.slice(0, -1); out.splice(lineas - 1, out.length, u.trimEnd() + '…'); }
+    return out;
+  };
+  const anchoTag = (f) => { if (!f.tag) return 0; mg.font = F('800', 13); return mg.measureText(f.tag).width + 24; };
+  const armar = (f) => { mg.font = F('700', 19); const vw = mg.measureText(f.val).width; const tg = anchoTag(f);
+    return { ...f, tg, noms: partir(f.nom, F('700', 19), LW - vw - 14 - tg, 2), subs: f.sub ? partir(f.sub, F('400', 16.5), LW, 2) : [] }; };
+  filas.forEach((fs, k) => { filas[k] = fs.map(armar); });
+  const altoFila = (f) => 14 + 24 * f.noms.length + 21 * f.subs.length + (f.subs.length ? 4 : 0);
+  const altoLista = (fs) => fs.reduce((a, f) => a + altoFila(f), 0);
+  // Grilla: de a 3 por fila; un último día solo va a lo ancho con sus renglones en 3 columnas.
+  const cw = (W - 2 * P - 2 * GAP) / 3;
+  const grupos = [];
+  for (let k = 0; k < d.dias.length; k += 3) grupos.push(d.dias.slice(k, k + 3).map((x, j) => k + j));
+  const reparte = (fs) => { const cols = [[], [], []]; const per = Math.ceil(fs.length / 3); fs.forEach((f, i) => cols[Math.min(2, Math.floor(i / per))].push(f)); return cols; };
+  const ancho = (g) => g.length === 1 && d.dias.length > 1;
+  const altoGrupo = (g) => ancho(g) ? HCAB + Math.max(...reparte(filas[g[0]]).map(altoLista)) + 10 : HCAB + Math.max(...g.map(k => altoLista(filas[k]))) + 10;
+  const H = 420 + Math.ceil(r.detalle.length / 3) * 26 + grupos.reduce((a, g) => a + altoGrupo(g) + GAP, 0) + r.notas.length * 54 + 120;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const g = cv.getContext('2d'); g.scale(S, S);
   const caja = (x, y, w, h, rad, fill, stroke, lw) => { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, rad); else g.rect(x, y, w, h); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = lw || 1; g.stroke(); } };
   const recorta = (t, max) => { let s = String(t); while (s.length > 1 && g.measureText(s).width > max) s = s.slice(0, -2) + '…'; return s; };
   const txt = (t, x, y, font, color, align, max) => { g.font = font; g.fillStyle = color; g.textAlign = align || 'left'; g.fillText(max ? recorta(t, max) : t, x, y); };
-  const COL = { mas: '#A63D2F', menos: '#2F6B46', '': '#241F16', deuda: '#A63D2F', favor: '#2F6B46' };
+  const medir = (t, font) => { g.font = font; return g.measureText(t).width; };
+  const calendario = (x, y, color) => { g.strokeStyle = color; g.lineWidth = 2; caja(x, y + 3, 20, 18, 3, null, color, 2); g.beginPath(); g.moveTo(x, y + 9); g.lineTo(x + 20, y + 9); g.moveTo(x + 6, y); g.lineTo(x + 6, y + 5); g.moveTo(x + 14, y); g.lineTo(x + 14, y + 5); g.stroke(); };
   g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
-  // Cabecera
-  const gr = g.createLinearGradient(0, 0, W, 90); gr.addColorStop(0, '#2B2418'); gr.addColorStop(1, '#4A3B22');
-  g.fillStyle = gr; g.fillRect(0, 0, W, 90);
-  caja(P, 16, 104, 58, 10, '#fff');
-  if (logo) { const lw = 88, lh = lw * logo.height / logo.width; g.drawImage(logo, P + 8, 16 + (58 - lh) / 2, lw, lh); }
-  txt('Boleta de pedidos', W - P, 42, F('600', 19, true), '#F1D79C', 'right');
-  txt('Emitida ' + dmy(hoyART()), W - P, 62, F('400', 12), '#D9CBA8', 'right');
-  // Cliente y período
-  let y = 112;
-  txt('Cliente', P, y, F('400', 11), '#8A7F66'); txt(d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período', W - P, y, F('400', 11), '#8A7F66', 'right');
-  y += 19; txt(d.persona.nombre, P, y, F('800', 15), '#241F16', 'left', W / 2 - P); txt(periodoTxt(d), W - P, y, F('800', 15), '#241F16', 'right');
-  y += 14; g.fillStyle = '#EFE6D0'; g.fillRect(0, y, W, 1);
-  // Total grande
-  y += 16; const fav = r.final.cls === 'favorfin';
-  caja(P, y, W - 2 * P, 62, 14, fav ? '#E6F2EA' : '#FBF1DC', fav ? '#3F7D57' : '#C9994A', 2);
-  txt(r.final.txt, P + 18, y + 38, F('400', 16), '#241F16'); txt(r.final.val, W - P - 18, y + 41, F('800', 27), '#241F16', 'right');
-  // Cajitas
-  y += 74; const nb = r.filas.length, cw = (W - 2 * P - 8 * (nb - 1)) / nb;
-  r.filas.forEach(([a, b, c], i) => { const x = P + i * (cw + 8); caja(x, y, cw, 46, 10, '#FAF7EF'); txt(a, x + 10, y + 18, F('400', 12), '#6B6350', 'left', cw - 20); txt(b, x + 10, y + 36, F('800', 14), COL[c] || '#241F16', 'left', cw - 20); });
-  y += 46;
+
+  // Cabecera oscura: logo | título y emisión ··· cliente | período
+  const HH = 112;
+  const gr = g.createLinearGradient(0, 0, W, HH); gr.addColorStop(0, '#2B2418'); gr.addColorStop(1, '#3E3220');
+  g.fillStyle = gr; g.fillRect(0, 0, W, HH);
+  caja(P, 18, 150, 76, 12, '#fff');
+  if (logo) { const lw = 128, lh = Math.min(64, lw * logo.height / logo.width); const lw2 = lh * logo.width / logo.height; g.drawImage(logo, P + (150 - lw2) / 2, 18 + (76 - lh) / 2, lw2, lh); }
+  g.fillStyle = '#6B5A3A'; g.fillRect(P + 172, 24, 2, 64);
+  txt('Boleta de pedidos', P + 194, 58, F('700', 34, true), '#F1D79C');
+  txt('Emitida ' + dmy(hoyART()), P + 194, 88, F('400', 18), '#D9CBA8');
+  const labP = d.fecha_desde === d.fecha_hasta ? 'Fecha' : 'Período', valP = periodoTxt(d);
+  const wP = Math.max(medir(valP, F('800', 28)), medir(labP, F('400', 18)));
+  const xP = W - P - wP;
+  txt(labP, xP, 48, F('400', 18), '#D9CBA8'); txt(valP, xP, 84, F('800', 28), '#fff');
+  g.fillStyle = '#6B5A3A'; g.fillRect(xP - 26, 24, 2, 64);
+  const maxC = Math.max(120, xP - 52 - (P + 194 + medir('Boleta de pedidos', F('700', 34, true)) + 30));
+  const nomC = (() => { g.font = F('800', 28); return recorta(d.persona.nombre, maxC); })();
+  const wC = Math.max(medir(nomC, F('800', 28)), medir('Cliente', F('400', 18)));
+  const xC = xP - 52 - wC;
+  txt('Cliente', xC, 48, F('400', 18), '#D9CBA8'); txt(nomC, xC, 84, F('800', 28), '#fff');
+
+  // Total grande + cuadros (debía de antes, pedidos, pagos)
+  let y = HH + 22;
+  const fav = r.final.cls === 'favorfin';
+  const tw = Math.round((W - 2 * P) * 0.4), th = 92;
+  caja(P, y, tw, th, 16, fav ? '#E6F2EA' : '#FBF1DC', fav ? '#3F7D57' : '#C9994A', 2);
+  txt(r.final.txt, P + 26, y + 56, F('400', 24), '#241F16');
+  txt(r.final.val, P + tw - 26, y + 62, F('800', 44), '#241F16', 'right');
+  const nb = r.filas.length, bx0 = P + tw + GAP, bw = (W - P - bx0 - GAP * (nb - 1)) / nb;
+  r.filas.forEach(([a, b, c], i) => {
+    const x = bx0 + i * (bw + GAP), cx = x + bw / 2;
+    caja(x, y, bw, th, 16, c === 'favor' ? '#E6F2EA' : '#FAF4E8');
+    txt(a, cx, y + 38, F('500', 19), '#4A3F2C', 'center', bw - 24);
+    txt(b, cx, y + 72, F('800', 28), COL[c] || '#241F16', 'center', bw - 24);
+  });
+  y += th;
+  // Pagos y ajustes del período (detalle), en 3 columnas
   if (r.detalle.length) {
-    y += 22; txt(r.tituloDet, P, y, F('700', 12), '#6B6350');
-    r.detalle.forEach(([a, b]) => { y += 18; txt(a, P, y, F('400', 12), '#241F16', 'left', W - 2 * P - 110); txt(b, W - P, y, F('400', 12), '#241F16', 'right'); });
-  }
-  if (d.dias.length) {
-    y += 30; txt('DÍA POR DÍA', P, y, F('700', 12), '#8A7F66'); y += 10;
-    d.dias.forEach((x, k) => {
-      const fs = filas[k], h = 34 + fs.reduce((a, f) => a + altoFila(f), 0);
-      g.save(); caja(P, y, W - 2 * P, h, 12, '#fff', '#EFE6D0', 1); g.clip();
-      g.fillStyle = '#FBF3E3'; g.fillRect(P, y, W - 2 * P, 34); g.restore();
-      caja(P, y, W - 2 * P, h, 12, null, '#EFE6D0', 1);
-      txt(diaTxt(x.fecha), P + IN, y + 22, F('700', 14), '#241F16'); txt(plata(x.importe), W - P - IN, y + 22, F('800', 14), '#241F16', 'right');
-      let yy = y + 34;
-      fs.forEach((f, i) => {
-        if (i) { g.fillStyle = '#F0E7D2'; for (let z = P + IN; z < W - P - IN; z += 6) g.fillRect(z, yy, 3, 1); }
-        let xx = P + IN;
-        if (f.tag) {
-          g.font = F('800', 9); const tw = g.measureText(f.tag).width + 10;
-          caja(xx, yy + 8, tw, 15, 5, f.tagCls === 'ext' ? '#FBE3DE' : f.tagCls === 'dev' ? '#DDEFE3' : '#EEE9DD');
-          txt(f.tag, xx + 5, yy + 19, F('800', 9), f.tagCls === 'ext' ? '#A63D2F' : f.tagCls === 'dev' ? '#2F6B46' : '#6B6350'); xx += tw + 6;
-        }
-        g.font = F('600', 13); const vw = g.measureText(f.val).width;
-        txt(f.nom, xx, yy + 20, F('700', 13.5), '#241F16', 'left', W - P - IN - vw - 14 - xx);
-        txt(f.val, W - P - IN, yy + 20, F('600', 13.5), COL[f.cls] || '#241F16', 'right');
-        if (f.sub) txt(f.sub, P + IN, yy + 36, F('400', 12), '#8A7F66', 'left', W - 2 * P - 2 * IN);
-        yy += altoFila(f);
-      });
-      y += h + 10;
+    y += 30; txt(r.tituloDet, P, y, F('700', 17), '#6B6350');
+    const dcw = (W - 2 * P) / 3;
+    r.detalle.forEach(([a, b], i) => {
+      const x = P + (i % 3) * dcw, yy = y + 26 * (Math.floor(i / 3) + 1);
+      const vb = medir(b, F('700', 17));
+      txt(a, x, yy, F('400', 17), '#241F16', 'left', dcw - vb - 30);
+      txt(b, x + dcw - 20, yy, F('700', 17), b.startsWith('−') ? COL.menos : '#241F16', 'right');
     });
-    y += 6; g.textAlign = 'left'; g.font = F('400', 11.5);
-    let xl = P; [['+', '#A63D2F'], [' suma a su cuenta · ', '#8A7F66'], ['−', '#2F6B46'], [' se descuenta', '#8A7F66']].forEach(([t, c]) => { g.fillStyle = c; g.fillText(t, xl, y); xl += g.measureText(t).width; });
+    y += 26 * Math.ceil(r.detalle.length / 3);
   }
-  g.textAlign = 'left'; g.fillStyle = '#6B6350'; g.font = F('400', 12);
+
+  // Un renglón de un día
+  const renglon = (f, x0, w, yy, primero) => {
+    if (!primero) { g.fillStyle = '#F0E7D2'; for (let z = x0; z < x0 + w; z += 7) g.fillRect(z, yy, 3, 1); }
+    if (f.tag) {
+      const [bg, fg] = TAGC[f.tagCls] || TAGC.aj;
+      caja(x0, yy + 9, f.tg - 8, 24, 7, bg);
+      txt(f.tag, x0 + 8, yy + 26, F('800', 13), fg);
+    }
+    f.noms.forEach((t, i) => txt(t, x0 + f.tg, yy + 28 + 24 * i, F('700', 19), '#241F16'));
+    txt(f.val, x0 + w, yy + 28, F('700', 19), COL[f.cls] || '#241F16', 'right');
+    const ys = yy + 28 + 24 * (f.noms.length - 1);
+    f.subs.forEach((t, i) => txt(t, x0, ys + 21 + 21 * i, F('400', 16.5), '#6B6350'));
+    return yy + altoFila(f);
+  };
+  // Banda del día: calendario, nombre y total en pastilla oscura
+  const banda = (x, yy, w, dia) => {
+    g.save(); caja(x, yy, w, HCAB, 14); g.clip(); g.fillStyle = '#FBF1DC'; g.fillRect(x, yy, w, HCAB); g.restore();
+    calendario(x + IN, yy + 15, '#8A6A2E');
+    txt(diaTxt(dia.fecha), x + IN + 32, yy + 34, F('800', 22), '#241F16');
+    const imp = plata(dia.importe), pw = medir(imp, F('800', 21)) + 26;
+    caja(x + w - IN - pw + 6, yy + 10, pw, 32, 10, '#4A3B22');
+    txt(imp, x + w - IN + 6 - pw / 2, yy + 33, F('800', 21), '#fff', 'center');
+  };
+
+  if (d.dias.length) {
+    y += 46; txt('DÍA POR DÍA', P, y, F('800', 20), '#6B5A3A');
+    const lx = P + medir('DÍA POR DÍA', F('800', 20)) + 18; g.fillStyle = '#C9B48A'; g.fillRect(lx, y - 7, W - P - lx, 1.5);
+    y += 18;
+    for (const gr2 of grupos) {
+      const h = altoGrupo(gr2);
+      if (ancho(gr2)) {
+        const k = gr2[0], w = W - 2 * P;
+        caja(P, y, w, h, 14, '#fff', '#EADFC6', 1.5); banda(P, y, w, d.dias[k]);
+        reparte(filas[k]).forEach((col, c) => { let yy = y + HCAB + 2; col.forEach((f, i) => { yy = renglon(f, P + IN + c * (cw + GAP), cw - 2 * IN, yy, i === 0); }); });
+      } else {
+        gr2.forEach((k, j) => {
+          const x = P + j * (cw + GAP);
+          caja(x, y, cw, h, 14, '#fff', '#EADFC6', 1.5); banda(x, y, cw, d.dias[k]);
+          let yy = y + HCAB + 2; filas[k].forEach((f, i) => { yy = renglon(f, x + IN, cw - 2 * IN, yy, i === 0); });
+        });
+      }
+      y += h + GAP;
+    }
+  }
+  // Notas (a confirmar, saldo a favor, sin pedidos)
+  g.textAlign = 'left'; g.fillStyle = '#6B6350'; g.font = F('400', 17);
   for (const t of r.notas) {
-    y += 6; const pal = t.split(' '); let lin = '';
-    for (const p of pal) { const prueba = lin ? lin + ' ' + p : p; if (g.measureText(prueba).width > W - 2 * P) { y += 16; g.fillText(lin, P, y); lin = p; } else lin = prueba; }
-    if (lin) { y += 16; g.fillText(lin, P, y); }
+    y += 4; const pal = t.split(' '); let lin = '';
+    for (const p of pal) { const prueba = lin ? lin + ' ' + p : p; if (g.measureText(prueba).width > W - 2 * P) { y += 24; g.fillText(lin, P, y); lin = p; } else lin = prueba; }
+    if (lin) { y += 24; g.fillText(lin, P, y); }
   }
-  y += 24; g.fillStyle = '#EFE6D0'; g.fillRect(0, y - 12, W, 1);
-  txt('Comprobante interno · No válido como factura', W / 2, y + 6, F('400', 10.5), '#9A917B', 'center');
-  const final = document.createElement('canvas'); final.width = W * S; final.height = Math.min(H, y + 20) * S;
+  // Pie: leyenda + comprobante interno
+  y += 26;
+  if (d.dias.length) {
+    g.textAlign = 'left'; g.font = F('500', 17); let xl = P;
+    [['+', '#A63D2F'], [' suma a su cuenta   ', '#6B6350'], ['−', '#2F6B46'], [' se descuenta', '#6B6350']].forEach(([t, c]) => { g.fillStyle = c; g.fillText(t, xl, y); xl += g.measureText(t).width; });
+  }
+  txt('Comprobante interno · No válido como factura', W - P, y, F('400', 17), '#6B6350', 'right');
+  const alto = Math.min(H, y + 22);
+  const final = document.createElement('canvas'); final.width = W * S; final.height = alto * S;
   final.getContext('2d').drawImage(cv, 0, 0);
   return new Promise((ok) => final.toBlob((b) => ok(b), 'image/png'));
 }
 
-async function compartir(d) {
-  const blob = await imagenBoleta(d);
+async function compartir(d, lista) {
+  const blob = lista || await imagenBoleta(d);
   if (!blob) return toast('No se pudo preparar la imagen.');
   const nombre = 'Boleta ' + (d.persona.nombre || 'cliente').replace(/[^\p{L}\p{N} ]/gu, '').trim() + ' ' + d.fecha_desde + (d.fecha_hasta !== d.fecha_desde ? ' al ' + d.fecha_hasta : '') + '.png';
   const archivo = new File([blob], nombre, { type: 'image/png' });
