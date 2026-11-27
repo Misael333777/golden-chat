@@ -8,7 +8,7 @@
 // Reglas: el backend decide TODO (tipo solo_por_hoy / pedido_nuevo_no_recurrente, corte, cierre, roles, idempotencia).
 // Acá no se recalcula producción ni el habitual: se muestra lo que devuelve el backend y su código.
 // Finanzas: solo estado operativo del extra (generado / pendiente de generar / no corresponde). Nunca precios ni importes del extra guardado.
-// Excepcion: el formulario 'Cargar extra para hoy' muestra el precio ACTUAL del catalogo solo como referencia (el backend congela el precio real).
+// Excepcion: el formulario 'Cargar extra' muestra el precio ACTUAL del catalogo solo como referencia (el backend congela el precio real).
 import * as ops from '../../ops.js';
 import { el, montar, aviso, modal, confirmar, conBloqueo, toast } from '../../ui.js';
 import { avisoFalla, avisoSinConfirmar } from './personas.js';
@@ -95,7 +95,7 @@ function avisoNegocio(r) {
 async function cargarApoyo(ctx) {
   const [p, c] = await Promise.all([ctx.pedir(TIPO, 'listar_personas', { buscar: '' }), ctx.pedir(TIPO, 'listar_productos', {})]);
   const personas = p.r && p.r.success && p.r.datos && Array.isArray(p.r.datos.personas) ? p.r.datos.personas.filter(x => x && PID.test(x.persona_id || '')) : null;
-  // De los productos: id, nombre, unidad, estado e imagen (fotos del catálogo + carrito). Precios y visibilidad por rol SOLO para la referencia de 'Cargar extra para hoy' (el backend congela el precio).
+  // De los productos: id, nombre, unidad, estado e imagen (fotos del catálogo + carrito). Precios y visibilidad por rol SOLO para la referencia de 'Cargar extra' (el backend congela el precio).
   const nOk = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const productos = c.r && c.r.success && c.r.datos && Array.isArray(c.r.datos.productos)
     ? c.r.datos.productos.filter(x => x && Number.isInteger(x.producto_id)).map(x => ({ producto_id: x.producto_id, producto: str(x.producto), unidad: str(x.unidad), activo: x.activo === true, categoria: str(x.categoria),
@@ -322,8 +322,8 @@ async function elegirPersona(ctx) {
 function vistaExtrasPendientes(ctx, zona) {
   const cuerpo = el('div', { class: 'stack', id: 'extras-pendientes', 'data-estado': 'cargando' });
   const avisosEx = el('div', { class: 'stack', id: 'extras-aviso' });
-  // 'Cargar extra para hoy' para cualquier persona (elige persona, rol y productos). Reutiliza solicitar_extra.
-  const bCrear = el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'btn-crear-extra' }, 'Cargar extra para hoy');
+  // 'Cargar extra' para cualquier persona (elige persona, rol y productos). Reutiliza solicitar_extra.
+  const bCrear = el('button', { type: 'button', class: 'btn btn-gold btn-sm', id: 'btn-crear-extra' }, 'Cargar extra');
   bCrear.addEventListener('click', conBloqueo(bCrear, async () => {
     montar(avisosEx);
     const apoyo = await cargarApoyo(ctx);
@@ -476,9 +476,10 @@ function abrirEntrega(ctx, x, alExito) {
 // =====================================================================================
 // EDITOR DE LÍNEAS (productos del catálogo; solo id, nombre y unidad)
 // =====================================================================================
-// ---------- 'Cargar extra para hoy' (Admin General) ----------
-// Reutiliza solicitar_extra (Extras PROD): con actor Admin el extra queda aprobado, entrega pendiente y sin cargo; siempre para HOY (Reglas).
-// Se envia SOLO persona_id, rol_pedido, fecha_entrega (hoy) y lineas {producto_id, cantidad, detalle_libre}. Nunca precio, lista, estado ni actor.
+// ---------- 'Cargar extra' (Admin General) ----------
+// Reutiliza solicitar_extra (Extras PROD): con actor Admin el extra queda aprobado, entrega pendiente y sin cargo.
+// 27/11: fecha de hoy o de un dia anterior, hasta 30 dias atras (Reglas lo acepta solo para Admin General). Nunca futura.
+// Se envia SOLO persona_id, rol_pedido, fecha_entrega y lineas {producto_id, cantidad, detalle_libre}. Nunca precio, lista, estado ni actor.
 // El precio que se muestra es la referencia ACTUAL del catalogo (misma regla que Reglas condicion_comercial); el que vale lo congela el backend.
 const listaDe = (persona, rol) => rol === 'repartidor' ? 'mayorista' : (persona && ['minorista', 'mayorista'].includes(persona.lista_precio) ? persona.lista_precio : null);
 const catalogoExtra = (productos, rol, lista) => (productos || []).filter(p => p.activo && (rol === 'repartidor' ? p.visible_repartidores : p.visible_clientes)
@@ -497,6 +498,12 @@ function abrirCrearExtra(ctx, apoyo, ini, alExito) {
   const resumen = el('div', { class: 'stack', id: 'extra-resumen', 'aria-live': 'polite' });
   const zona = el('div', { class: 'stack', id: 'extra-aviso' });
   const b = el('button', { type: 'submit', class: 'btn btn-primary', id: 'btn-guardar-extra' }, 'Crear extra');
+  const fMax = hoyART(), fMin = sumarDias(fMax, -30);
+  const fIni = ini && typeof ini.fecha === 'string' && ini.fecha >= fMin && ini.fecha <= fMax ? ini.fecha : fMax;
+  const iFec = el('input', { class: 'input', id: 'extra-fecha', type: 'date', min: fMin, max: fMax, value: fIni });
+  const notaFec = el('p', { class: 'muted small', id: 'extra-fecha-nota', 'aria-live': 'polite' });
+  const pintarFecha = () => { const f = iFec.value; notaFec.textContent = f && f < fMax ? 'Extra de un día anterior: queda en la cuenta y en la boleta con la fecha ' + fmtMin(f) + '.' : ''; };
+  iFec.addEventListener('change', pintarFecha);
   let cat = [], lista = null;
   const pintarResumen = () => {
     if (!ed) return montar(resumen);
@@ -531,22 +538,25 @@ function abrirCrearExtra(ctx, apoyo, ini, alExito) {
   if (sPer) sPer.addEventListener('change', () => { persona = candidatas.find(p => p.persona_id === sPer.value) || null; armarRoles(); });
   sRol.addEventListener('change', () => { rol = sRol.value; armarEditor(); });
   const form = el('form', { class: 'stack', novalidate: true, autocomplete: 'off' },
-    el('p', { class: 'muted small', text: 'Extra de reposición para hoy (' + fmtMin(hoyART()) + '). Cargado por Golden queda aprobado, con la entrega pendiente y sin cargo hasta registrar la entrega. No entra en Producción.' }),
+    el('p', { class: 'muted small', text: 'Extra de reposición, de hoy o de un día anterior (hasta 30 días). Cargado por Golden queda aprobado, con la entrega pendiente y sin cargo hasta registrar la entrega. No entra en Producción.' }),
     sPer ? el('div', { class: 'field' }, el('label', { for: 'extra-persona', text: 'Persona' }), sPer) : null,
+    el('div', { class: 'field' }, el('label', { for: 'extra-fecha', text: 'Fecha del extra' }), iFec, notaFec),
     campoRol, zonaEd, resumen, b, zona);
-  const m = modal('Cargar extra para hoy' + (persona ? ' — ' + (str(persona.nombre) || persona.persona_id) : ''), form);
-  armarRoles();
+  const m = modal('Cargar extra' + (persona ? ' — ' + (str(persona.nombre) || persona.persona_id) : ''), form);
+  armarRoles(); pintarFecha();
   form.addEventListener('submit', conBloqueo(b, async () => {
     montar(zona);
     if (!persona) return montar(zona, aviso('error', 'Elegí la persona.'));
+    const fEx = iFec.value;
+    if (!FECHA_RE.test(fEx || '') || fEx > fMax || fEx < fMin) return montar(zona, aviso('error', 'Elegí una fecha de hoy o de hasta 30 días atrás.'));
     if (!ed) return montar(zona, aviso('error', 'No se puede cargar el extra para esta persona.'));
     const l = ed.leer();
     if (l.error) return montar(zona, aviso('error', l.error));
     const prods = l.lineas.map(x => x.producto_id);
     if (new Set(prods).size !== prods.length) return montar(zona, aviso('error', 'Hay un producto repetido: juntalo en una sola línea.'));
     const lineas = l.lineas.map(x => { const o = { producto_id: x.producto_id, cantidad: x.cantidad }; if (x.detalle_libre) o.detalle_libre = x.detalle_libre; return o; });
-    await escribir(ctx, zona, 'solicitar_extra', { persona_id: persona.persona_id, rol_pedido: rol, fecha_entrega: hoyART(), lineas }, async (r) => {
-      m.cerrar(); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(r, persona);
+    await escribir(ctx, zona, 'solicitar_extra', { persona_id: persona.persona_id, rol_pedido: rol, fecha_entrega: fEx, lineas }, async (r) => {
+      m.cerrar(); toast(OK_TXT[r.codigo] || 'Listo.'); await alExito(r, persona, fEx);
     });
   }, 'Creando…'));
 }
@@ -942,9 +952,9 @@ export function vistaPersonaPedido(ctx, cont, pidTexto, fechaTexto) {
     if (!z.isConnected) return;
     z.dataset.estado = 'listo';
     const esHoy = fecha === hoyART();
-    // Siempre crea el extra para HOY: si la ficha muestra otra fecha, al terminar se abre la ficha de hoy.
+    // 27/11: el extra puede ser de hoy o de un dia anterior (hasta 30 dias). Si la ficha muestra un dia valido, viene elegido; al terminar se abre la ficha de la fecha del extra.
     const bNuevo = persona && rolesActivos(persona).some(r => r === 'cliente' || r === 'repartidor') ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', id: 'btn-cargar-extra',
-      onclick: () => abrirCrearExtra(ctx, apoyo, { persona, rol }, async (r) => { montar(avisos, avisoNegocio(r)); if (esHoy) await cargarExtras(z); else ctx.ir('#/admin/pedidos/persona/' + encodeURIComponent(pid) + '/' + hoyART()); }) }, 'Cargar extra para hoy') : null;
+      onclick: () => abrirCrearExtra(ctx, apoyo, { persona, rol, fecha }, async (r, _p, f) => { montar(avisos, avisoNegocio(r)); if (f === fecha) await cargarExtras(z); else ctx.ir('#/admin/pedidos/persona/' + encodeURIComponent(pid) + '/' + f); }) }, 'Cargar extra') : null;
     const head = el('div', { class: 'card-head' }, el('h3', { class: 'h-ico h-ico-extra', text: 'Extras del día' }), el('span', { class: 'spacer' }), bNuevo);
     if (res.falla) return montar(z, head, avisoFalla(res.falla, () => cargarExtras(z)));
     if (ctx.revisarFinSesion(res.r)) return;
